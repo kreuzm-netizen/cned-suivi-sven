@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Application principale de suivi CNED pour Sven
  */
 
@@ -415,13 +415,13 @@ function setupEventListeners() {
     formFirebase.addEventListener("submit", (e) => {
       e.preventDefault();
       const raw = document.getElementById("firebaseJsonInput").value;
-      try {
-        const parsed = JSON.parse(raw);
+      const parsed = parseFirebaseSnippet(raw);
+      if (parsed) {
         saveFirebaseConfig(parsed);
         alert("Configuration Firebase enregistrée avec succès ! Rechargement de la page...");
         window.location.reload();
-      } catch (err) {
-        alert("Erreur dans le format JSON : vérifiez que vous avez bien copié l'objet firebaseConfig complet.");
+      } else {
+        alert("Impossible de lire la configuration Firebase. Assurez-vous d'inclure le bloc contenant apiKey et projectId.");
       }
     });
   }
@@ -434,6 +434,33 @@ function setupEventListeners() {
   });
   document.getElementById("fileImportInput")?.addEventListener("change", importJsonFile);
   document.getElementById("btnResetAll")?.addEventListener("click", confirmResetAll);
+}
+
+function parseFirebaseSnippet(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  // 1. Essai en JSON strict
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && obj.projectId) return obj;
+  } catch (e) {}
+
+  // 2. Extraction automatique par regex depuis du code JS collé
+  const extract = (key) => {
+    const match = raw.match(new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`));
+    return match ? match[1] : '';
+  };
+
+  const apiKey = extract('apiKey');
+  const authDomain = extract('authDomain');
+  const projectId = extract('projectId');
+  const storageBucket = extract('storageBucket');
+  const messagingSenderId = extract('messagingSenderId');
+  const appId = extract('appId');
+
+  if (projectId && apiKey) {
+    return { apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId };
+  }
+  return null;
 }
 
 function setTab(filter) {

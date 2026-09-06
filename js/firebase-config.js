@@ -1,18 +1,15 @@
 ﻿/**
  * Configuration Firebase pour la synchronisation Cloud en temps réel.
- * 
- * Si vous configurez Firebase sur console.firebase.google.com :
- * 1. Collez vos identifiants ci-dessous, OU
- * 2. Utilisez simplement le bouton "Paramètres Cloud ⚙️" directement dans l'application !
+ * Configuré pour le projet CNED Sven : cned-sven
  */
 
 const DEFAULT_FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyBOTTQpSm4DeHoBO68evslVd2itwnat9lo",
+  authDomain: "cned-sven.firebaseapp.com",
+  projectId: "cned-sven",
+  storageBucket: "cned-sven.firebasestorage.app",
+  messagingSenderId: "33109320940",
+  appId: "1:33109320940:web:1931620f6fe45cf83531c9"
 };
 
 const CONFIG_STORAGE_KEY = "cned_sven_firebase_config_v1";
