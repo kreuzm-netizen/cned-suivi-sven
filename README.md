@@ -1,4 +1,4 @@
-﻿# 🎓 CNED Sven - Application de Suivi des Séances & Devoirs
+# 🎓 CNED Sven - Application de Suivi des Séances & Devoirs
 
 Application collaborative multi-appareils (iPhone, Android, Windows) conçue spécifiquement pour suivre l'avancement scolaire CNED de Sven.
 
@@ -37,6 +37,22 @@ L'application utilise **Google Firebase Firestore** pour synchroniser instantan�
    - Soit dans le fichier `js/firebase-config.js`.
 
 C'est tout ! Dès lors, tous les appareils connectés à cette application partageront les mêmes données en direct.
+
+---
+
+## 🔐 2b. Connexion Google & Domaines autorisés
+
+L'application intègre désormais la connexion obligatoire via Google pour sécuriser l'accès et enregistrer qui a validé chaque séance.
+
+### Autoriser votre site dans Firebase Authentication (Indispensable) :
+1. Sur [console.firebase.google.com](https://console.firebase.google.com), ouvrez le projet **cned-sven**.
+2. Dans le menu de gauche, cliquez sur **« Authentication »** puis sur l'onglet **« Paramètres »** (Settings).
+3. Cliquez sur **« Domaines autorisés »** (Authorized domains) puis sur **« Ajouter un domaine »**.
+4. Saisissez le domaine de votre site GitHub Pages :
+   `kreuzm-netizen.github.io` *(sans http ni slash)*.
+5. Cliquez sur **« Enregistrer »**.
+
+Désormais, toute la famille peut se connecter en 1 clic avec son compte Google depuis son téléphone ou son PC !
 
 ---
 
