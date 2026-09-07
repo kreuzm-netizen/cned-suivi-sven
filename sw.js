@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Service Worker pour le support hors-ligne de CNED Sven
  */
 
@@ -10,6 +10,7 @@ const STATIC_ASSETS = [
   './css/app.css',
   './js/data.js',
   './js/firebase-config.js',
+  './js/auth.js',
   './js/sync.js',
   './js/app.js',
   './icons/icon-192.png',

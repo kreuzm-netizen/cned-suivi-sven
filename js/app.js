@@ -3,46 +3,146 @@
  */
 
 import { CNED_SUBJECTS, TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE } from './data.js';
-import { initSync, setSession, setDevoir, getCurrentState, importFullState, resetAllState } from './sync.js';
+import { initSync, setSession, setDevoir, getCurrentState, importFullState, resetAllState, setupFirebase } from './sync.js';
 import { getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured } from './firebase-config.js';
-
-const USER_STORAGE_KEY = "cned_sven_current_user_v1";
+import { initAuth, loginWithGoogle, logoutUser, getCurrentUser } from './auth.js';
 
 let activeFilter = 'all'; // 'all' | 'in_progress' | 'completed'
 let searchQuery = '';
 let openSubjects = new Set(["maths", "francais"]); // Ouvertes par défaut
 let deferredPrompt = null;
+let isReadOnlyMode = false;
 
 // Initialisation au chargement de la page
 window.addEventListener('DOMContentLoaded', async () => {
-  initUser();
   setupEventListeners();
   setupPwaInstall();
+  setupAuthHandlers();
 
   await initSync(
     onStateUpdated,
     onActivitiesUpdated,
     onStatusUpdated
   );
+
+  await initAuth(onAuthUserChanged);
 });
 
 /* ============================================================
-   GESTION DU PROFIL UTILISATEUR
+   GESTION DE L'AUTHENTIFICATION GOOGLE & PROFIL
    ============================================================ */
-function initUser() {
-  const select = document.getElementById("userSelect");
-  const savedUser = localStorage.getItem(USER_STORAGE_KEY) || "Sven";
+function setupAuthHandlers() {
+  document.getElementById("btnLoginGoogle")?.addEventListener("click", handleGoogleLogin);
+  document.getElementById("btnHeaderLogin")?.addEventListener("click", handleGoogleLogin);
+  document.getElementById("btnHeaderLogout")?.addEventListener("click", handleGoogleLogout);
   
-  if (select) {
-    select.value = savedUser;
-    select.addEventListener("change", (e) => {
-      localStorage.setItem(USER_STORAGE_KEY, e.target.value);
-    });
+  document.getElementById("btnBrowseReadOnly")?.addEventListener("click", () => {
+    isReadOnlyMode = true;
+    hideLoginOverlay();
+  });
+}
+
+async function handleGoogleLogin() {
+  const errorEl = document.getElementById("loginError");
+  if (errorEl) {
+    errorEl.classList.add("hidden");
+    errorEl.textContent = "";
+  }
+
+  try {
+    const user = await loginWithGoogle();
+    if (user) {
+      hideLoginOverlay();
+      isReadOnlyMode = false;
+    }
+  } catch (err) {
+    console.error("Erreur lors de la connexion Google :", err);
+    if (errorEl) {
+      errorEl.classList.remove("hidden");
+      if (err.code === 'auth/unauthorized-domain') {
+        const currentHost = window.location.hostname;
+        errorEl.innerHTML = `
+          <strong>Domaine non autorisé dans Firebase</strong> :<br>
+          Veuillez aller dans la console Firebase &gt; <em>Authentication</em> &gt; <em>Paramètres</em> &gt; <em>Domaines autorisés</em>, et ajouter : <code class="bg-rose-100 px-1 py-0.5 rounded font-mono font-bold text-rose-800">${escapeHtml(currentHost)}</code>.
+        `;
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        errorEl.textContent = "La fenêtre de connexion a été fermée avant la fin de l'opération.";
+      } else {
+        errorEl.textContent = `Erreur de connexion : ${err.message || err.code || "Vérifiez votre connexion"}`;
+      }
+    }
   }
 }
 
+async function handleGoogleLogout() {
+  if (confirm("Voulez-vous vous déconnecter de votre compte Google ?")) {
+    await logoutUser();
+    showLoginOverlay();
+  }
+}
+
+function onAuthUserChanged(user) {
+  const userProfileBadge = document.getElementById("userProfileBadge");
+  const btnHeaderLogin = document.getElementById("btnHeaderLogin");
+  const userDisplayName = document.getElementById("userDisplayName");
+  const userAvatar = document.getElementById("userAvatar");
+  const userAvatarFallback = document.getElementById("userAvatarFallback");
+
+  if (user) {
+    // Connecté
+    hideLoginOverlay();
+    isReadOnlyMode = false;
+
+    if (userProfileBadge) userProfileBadge.classList.remove("hidden");
+    if (btnHeaderLogin) btnHeaderLogin.classList.add("hidden");
+    
+    const name = user.displayName || user.email?.split('@')[0] || "Élève CNED";
+    if (userDisplayName) userDisplayName.textContent = name;
+
+    if (user.photoURL && userAvatar && userAvatarFallback) {
+      userAvatar.src = user.photoURL;
+      userAvatar.classList.remove("hidden");
+      userAvatarFallback.classList.add("hidden");
+    } else if (userAvatarFallback) {
+      userAvatarFallback.textContent = (name[0] || 'U').toUpperCase();
+      userAvatarFallback.classList.remove("hidden");
+      userAvatar?.classList.add("hidden");
+    }
+
+    // Reconnecter Cloud avec les droits utilisateur
+    setupFirebase();
+  } else {
+    // Déconnecté
+    if (userProfileBadge) userProfileBadge.classList.add("hidden");
+    if (btnHeaderLogin) btnHeaderLogin.classList.remove("hidden");
+
+    if (!isReadOnlyMode) {
+      showLoginOverlay();
+    }
+  }
+}
+
+function showLoginOverlay(msg = "") {
+  const overlay = document.getElementById("loginOverlay");
+  const errorEl = document.getElementById("loginError");
+  if (msg && errorEl) {
+    errorEl.textContent = msg;
+    errorEl.classList.remove("hidden");
+  }
+  if (overlay) overlay.classList.remove("hidden");
+}
+
+function hideLoginOverlay() {
+  const overlay = document.getElementById("loginOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
 function getActiveUser() {
-  return localStorage.getItem(USER_STORAGE_KEY) || "Sven";
+  const u = getCurrentUser();
+  if (u) {
+    return u.displayName || u.email?.split('@')[0] || "Utilisateur Google";
+  }
+  return "Visiteur";
 }
 
 /* ============================================================
@@ -340,7 +440,16 @@ function attachSubjectEvents() {
 /* ============================================================
    ACTIONS UTILISATEUR & GESTION DES CLICS
    ============================================================ */
+function requireLogin() {
+  if (!getCurrentUser()) {
+    showLoginOverlay("Veuillez vous connecter avec votre compte Google pour enregistrer des séances.");
+    return false;
+  }
+  return true;
+}
+
 window.handleSessionClick = async (subId, unitIndex, delta) => {
+  if (!requireLogin()) return;
   vibrate();
   const state = getCurrentState();
   const current = state[subId]?.unitsDone[unitIndex] || 0;
@@ -349,6 +458,7 @@ window.handleSessionClick = async (subId, unitIndex, delta) => {
 };
 
 window.handleDevoirClick = async (subId, delta) => {
+  if (!requireLogin()) return;
   vibrate();
   const state = getCurrentState();
   const current = state[subId]?.devoirsDone || 0;
@@ -366,6 +476,7 @@ window.toggleSubjectAccordion = (subId) => {
 };
 
 window.promptDirectUnit = async (subId, unitIndex, current, max) => {
+  if (!requireLogin()) return;
   const answer = prompt(`Saisir directement le nombre de séances réalisées pour l'Unité ${unitIndex + 1} (entre 0 et ${max}) :`, current);
   if (answer !== null) {
     const num = parseInt(answer, 10);

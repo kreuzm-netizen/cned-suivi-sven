@@ -1,9 +1,10 @@
-﻿/**
+/**
  * Module de synchronisation temps réel & stockage (Firebase Firestore + LocalStorage)
  */
 
 import { CNED_SUBJECTS } from './data.js';
-import { getFirebaseConfig, isFirebaseConfigured } from './firebase-config.js';
+import { getFirebaseConfig, isFirebaseConfigured, getSharedFirebaseApp } from './firebase-config.js';
+import { getCurrentUser } from './auth.js';
 
 const LOCAL_DATA_KEY = "cned_sven_progress_data_v1";
 const LOCAL_ACTIVITIES_KEY = "cned_sven_activities_v1";
@@ -99,7 +100,7 @@ function saveLocalData() {
   localStorage.setItem(LOCAL_ACTIVITIES_KEY, JSON.stringify(currentActivities));
 }
 
-async function setupFirebase() {
+export async function setupFirebase() {
   const config = getFirebaseConfig();
   if (!config || !config.projectId) return;
 
@@ -108,8 +109,6 @@ async function setupFirebase() {
   }
 
   try {
-    // Import dynamique du SDK Firebase v10 officiel
-    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js");
     const { 
       getFirestore, 
       doc, 
@@ -117,7 +116,7 @@ async function setupFirebase() {
       setDoc 
     } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js");
 
-    const app = initializeApp(config, "cned-sven-app");
+    const app = await getSharedFirebaseApp();
     firestoreDb = getFirestore(app);
 
     const docRef = doc(firestoreDb, "cned_sven", "suivi");
@@ -199,6 +198,12 @@ export async function setSession(subjectId, unitIndex, newCount, author = "Anony
 
   currentState[subjectId].unitsDone[unitIndex] = count;
 
+  let effectiveAuthor = author;
+  if (!effectiveAuthor || effectiveAuthor === "Anonyme") {
+    const u = getCurrentUser();
+    if (u) effectiveAuthor = u.displayName || u.email.split('@')[0];
+  }
+
   const now = new Date();
   const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
@@ -208,7 +213,7 @@ export async function setSession(subjectId, unitIndex, newCount, author = "Anony
     : `-${oldCount - count} séance en ${sub.name} (Unité ${unitIndex + 1})`;
 
   currentActivities.unshift({
-    author: author,
+    author: effectiveAuthor,
     text: text,
     time: `${dateStr} ${timeStr}`,
     timestamp: Date.now()
@@ -237,6 +242,12 @@ export async function setDevoir(subjectId, newCount, author = "Anonyme") {
 
   currentState[subjectId].devoirsDone = count;
 
+  let effectiveAuthor = author;
+  if (!effectiveAuthor || effectiveAuthor === "Anonyme") {
+    const u = getCurrentUser();
+    if (u) effectiveAuthor = u.displayName || u.email.split('@')[0];
+  }
+
   const now = new Date();
   const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
@@ -246,7 +257,7 @@ export async function setDevoir(subjectId, newCount, author = "Anonyme") {
     : `Devoir retiré en ${sub.name} (${count}/${max})`;
 
   currentActivities.unshift({
-    author: author,
+    author: effectiveAuthor,
     text: text,
     time: `${dateStr} ${timeStr}`,
     timestamp: Date.now()

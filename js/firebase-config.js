@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Configuration Firebase pour la synchronisation Cloud en temps réel.
  * Configuré pour le projet CNED Sven : cned-sven
  */
@@ -38,4 +38,22 @@ export function saveFirebaseConfig(config) {
 export function isFirebaseConfigured() {
   const cfg = getFirebaseConfig();
   return Boolean(cfg && cfg.projectId && cfg.projectId.trim() !== "");
+}
+
+let sharedAppPromise = null;
+
+export async function getSharedFirebaseApp() {
+  if (sharedAppPromise) return sharedAppPromise;
+  
+  const config = getFirebaseConfig();
+  if (!config || !config.projectId) return null;
+
+  sharedAppPromise = (async () => {
+    const { initializeApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js");
+    const apps = getApps();
+    if (apps.length > 0) return apps[0];
+    return initializeApp(config);
+  })();
+
+  return sharedAppPromise;
 }
