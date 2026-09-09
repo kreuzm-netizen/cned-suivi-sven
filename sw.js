@@ -2,13 +2,15 @@
  * Service Worker pour le support hors-ligne de CNED Sven
  */
 
-const CACHE_NAME = 'cned-sven-cache-v1';
+const CACHE_NAME = 'cned-sven-cache-v2';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './css/app.css',
+  './js/vendor/chart.umd.min.js',
   './js/data.js',
+  './js/charts.js',
   './js/firebase-config.js',
   './js/auth.js',
   './js/sync.js',

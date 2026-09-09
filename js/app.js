@@ -6,6 +6,7 @@ import { CNED_SUBJECTS, TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE } from './data.
 import { initSync, setSession, setDevoir, getCurrentState, importFullState, resetAllState, setupFirebase } from './sync.js';
 import { getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured } from './firebase-config.js';
 import { initAuth, loginWithGoogle, logoutUser, getCurrentUser } from './auth.js';
+import { initChartsModule, renderCharts } from './charts.js';
 
 let activeFilter = 'all'; // 'all' | 'in_progress' | 'completed'
 let searchQuery = '';
@@ -18,6 +19,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   setupPwaInstall();
   setupAuthHandlers();
+  initChartsModule();
+  setupViewSwitcher();
 
   await initSync(
     onStateUpdated,
@@ -146,11 +149,43 @@ function getActiveUser() {
 }
 
 /* ============================================================
+   COMMUTATEUR DE VUE (TABLEAUX VS GRAPHIQUES)
+   ============================================================ */
+function setupViewSwitcher() {
+  const btnCards = document.getElementById("btnViewCards");
+  const btnCharts = document.getElementById("btnViewCharts");
+  const viewCards = document.getElementById("viewCardsSection");
+  const viewCharts = document.getElementById("viewChartsSection");
+
+  if (!btnCards || !btnCharts) return;
+
+  btnCards.addEventListener("click", () => {
+    btnCards.className = "flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer font-bold";
+    btnCharts.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer font-medium";
+
+    viewCards?.classList.remove("hidden");
+    viewCharts?.classList.add("hidden");
+  });
+
+  btnCharts.addEventListener("click", () => {
+    btnCharts.className = "flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer font-bold";
+    btnCards.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer font-medium";
+
+    viewCards?.classList.add("hidden");
+    viewCharts?.classList.remove("hidden");
+
+    // Déclencher le calcul et l'animation des graphiques
+    renderCharts(getCurrentState());
+  });
+}
+
+/* ============================================================
    MISE À JOUR DE L'INTERFACE (RÉACTIVE)
    ============================================================ */
 function onStateUpdated(state) {
   renderGlobalStats(state);
   renderSubjectsList(state);
+  renderCharts(state);
 }
 
 function onActivitiesUpdated(activities) {

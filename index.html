@@ -16,6 +16,7 @@
 
   <!-- Tailwind CSS & Styles locaux -->
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <script src="./js/vendor/chart.umd.min.js"></script>
   <link rel="stylesheet" href="./css/app.css">
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased min-h-full flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
@@ -145,32 +146,174 @@
 
     </section>
 
-    <!-- BARRE D'OUTILS : RECHERCHE ET ONGLETS -->
-    <section class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-      
-      <!-- Onglets de filtre -->
-      <div class="inline-flex p-1 bg-slate-200/80 rounded-xl text-xs font-semibold self-start">
-        <button id="filterAll" class="px-3 py-1.5 rounded-lg bg-white shadow-xs text-slate-900 font-bold">Toutes les matières</button>
-        <button id="filterProgress" class="px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:text-slate-900">En cours</button>
-        <button id="filterCompleted" class="px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:text-slate-900">Terminées</button>
+    <!-- COMMUTATEUR DE VUE PRINCIPAL : TABLEAUX VS GRAPHIQUES -->
+    <div class="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-2.5 pt-1">
+      <div class="inline-flex p-1 bg-slate-200/90 rounded-2xl text-xs font-bold shadow-xs">
+        <button id="btnViewCards" type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer">
+          <span class="text-sm">📋</span>
+          <span>Tableaux & Matières</span>
+        </button>
+        <button id="btnViewCharts" type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer">
+          <span class="text-sm">📊</span>
+          <span>Graphiques & Analyse</span>
+        </button>
       </div>
 
-      <!-- Barre de recherche -->
-      <div class="relative flex-1 sm:max-w-xs">
-        <input 
-          id="searchInput" 
-          type="text" 
-          placeholder="Rechercher une matière (Maths, SVT...)" 
-          class="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
+      <span class="text-xs text-slate-400 font-medium hidden sm:inline">
+        Synchronisation temps réel
+      </span>
+    </div>
+
+    <!-- 1. VUE TABLEAUX & MATIÈRES (CARTES DÉPLIABLES) -->
+    <div id="viewCardsSection" class="space-y-3.5">
+      <!-- BARRE D'OUTILS : RECHERCHE ET ONGLETS -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+        <!-- Onglets de filtre -->
+        <div class="inline-flex p-1 bg-slate-200/80 rounded-xl text-xs font-semibold self-start">
+          <button id="filterAll" class="px-3 py-1.5 rounded-lg bg-white shadow-xs text-slate-900 font-bold">Toutes les matières</button>
+          <button id="filterProgress" class="px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:text-slate-900">En cours</button>
+          <button id="filterCompleted" class="px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:text-slate-900">Terminées</button>
+        </div>
+
+        <!-- Barre de recherche -->
+        <div class="relative flex-1 sm:max-w-xs">
+          <input 
+            id="searchInput" 
+            type="text" 
+            placeholder="Rechercher une matière (Maths, SVT...)" 
+            class="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+        </div>
       </div>
 
-    </section>
+      <!-- GRILLE DES MATIÈRES (1 col sur mobile, 2 cols sur tablette/PC) -->
+      <div id="subjectsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+        <!-- Généré dynamiquement en JS -->
+      </div>
+    </div>
 
-    <!-- GRILLE DES MATIÈRES (1 col sur mobile, 2 cols sur tablette/PC) -->
-    <section id="subjectsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-      <!-- Généré dynamiquement en JS -->
-    </section>
+    <!-- 2. VUE GRAPHIQUES & STATISTIQUES (ANALYTIQUE) -->
+    <div id="viewChartsSection" class="hidden space-y-4">
+
+      <!-- Carte 1 : Comparatif des 10 Matières (Barres groupées) -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span class="text-base">📊</span>
+              <span>Comparaison de l'avancement par matière</span>
+            </h3>
+            <p class="text-xs text-slate-500">Pourcentages des séances et des devoirs par rapport aux objectifs officiels</p>
+          </div>
+          
+          <!-- Filtre de tri -->
+          <div class="flex items-center gap-1.5 text-xs font-semibold self-start sm:self-auto">
+            <span class="text-slate-400">Trier :</span>
+            <select id="chartSortSelect" class="bg-slate-100 border-none rounded-xl px-2.5 py-1 text-slate-700 text-xs font-semibold focus:ring-0 cursor-pointer">
+              <option value="default">Ordre officiel CNED</option>
+              <option value="progress_desc">🏆 Les plus avancées d'abord</option>
+              <option value="progress_asc">⚠️ À prioriser d'abord</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="relative h-80 sm:h-96 w-full">
+          <canvas id="chartSubjectComparison"></canvas>
+        </div>
+      </div>
+
+      <!-- Grille 2 cartes : Radar d'équilibre + Anneaux globaux -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        <!-- Radar Équilibre -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-2">
+          <div class="border-b border-slate-100 pb-2.5">
+            <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <span class="text-base">🕸️</span>
+              <span>Radar d'équilibre des 10 matières</span>
+            </h3>
+            <p class="text-xs text-slate-500">Visualisation de l'homogénéité du travail de Sven</p>
+          </div>
+          <div class="relative h-72 sm:h-80 w-full flex items-center justify-center">
+            <canvas id="chartRadarSubjects"></canvas>
+          </div>
+        </div>
+
+        <!-- Anneaux de complétion de l'année -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-2 flex flex-col justify-between">
+          <div class="border-b border-slate-100 pb-2.5">
+            <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <span class="text-base">🎯</span>
+              <span>Complétion globale de l'année CNED</span>
+            </h3>
+            <p class="text-xs text-slate-500">Répartition des séances et devoirs réalisés vs restants</p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 py-2">
+            <!-- Jauge Séances -->
+            <div class="flex flex-col items-center">
+              <span class="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-2">Séances</span>
+              <div class="relative w-32 h-32 sm:w-36 sm:h-36">
+                <canvas id="chartDoughnutSessions"></canvas>
+              </div>
+            </div>
+            <!-- Jauge Devoirs -->
+            <div class="flex flex-col items-center">
+              <span class="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2">Devoirs</span>
+              <div class="relative w-32 h-32 sm:w-36 sm:h-36">
+                <canvas id="chartDoughnutDevoirs"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-600 flex items-center justify-around text-center">
+            <div>
+              <span class="block text-slate-400 text-[10px] font-bold uppercase">Objectif Séances</span>
+              <span class="font-extrabold text-indigo-700 text-sm">559 au total</span>
+            </div>
+            <div class="w-px h-6 bg-slate-200"></div>
+            <div>
+              <span class="block text-slate-400 text-[10px] font-bold uppercase">Objectif Devoirs</span>
+              <span class="font-extrabold text-emerald-700 text-sm">74 au total</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Carte 3 : Tableau récapitulatif comparatif -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span class="text-base">📋</span>
+              <span>Tableau de bord comparatif des matières</span>
+            </h3>
+            <p class="text-xs text-slate-500">Synthèse chiffrée avec jauges et statuts par matière</p>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse min-w-[550px]">
+            <thead>
+              <tr class="text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 bg-slate-50/70">
+                <th class="py-2.5 px-3.5 rounded-l-xl">Matière</th>
+                <th class="py-2.5 px-3">Séances</th>
+                <th class="py-2.5 px-3">% Séances</th>
+                <th class="py-2.5 px-3">Devoirs</th>
+                <th class="py-2.5 px-3">% Devoirs</th>
+                <th class="py-2.5 px-3">Global</th>
+                <th class="py-2.5 px-3 text-right rounded-r-xl">Statut</th>
+              </tr>
+            </thead>
+            <tbody id="comparisonTableBody" class="divide-y divide-slate-100">
+              <!-- Rendu dynamiquement en JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
 
     <!-- JOURNAL D'ACTIVITÉ EN TEMPS RÉEL (Audit familial) -->
     <section class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
