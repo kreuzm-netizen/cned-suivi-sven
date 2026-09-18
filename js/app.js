@@ -10,7 +10,7 @@ import { initChartsModule, renderCharts } from './charts.js';
 
 let activeFilter = 'all'; // 'all' | 'in_progress' | 'completed'
 let searchQuery = '';
-let openSubjects = new Set(["maths", "francais"]); // Ouvertes par défaut
+let openSubjects = new Set(); // Toutes repliées par défaut
 let deferredPrompt = null;
 let isReadOnlyMode = false;
 
@@ -346,6 +346,29 @@ function renderSubjectCard(sub, state) {
   const isOpen = openSubjects.has(sub.id);
   const isFinished = (doneSubSessions >= totalSubSessions && doneDevoirs >= totalDevoirs);
 
+  // Détermination de l'unité en cours
+  let currentUnitNum = 1;
+  let allUnitsCompleted = true;
+  for (let i = 0; i < sub.units.length; i++) {
+    const done = subState.unitsDone[i] || 0;
+    const max = sub.units[i];
+    if (done < max) {
+      currentUnitNum = i + 1;
+      allUnitsCompleted = false;
+      break;
+    }
+  }
+
+  let currentUnitText = '';
+  let currentUnitBadgeClass = '';
+  if (allUnitsCompleted) {
+    currentUnitText = `Toutes unités terminées (${sub.units.length}/${sub.units.length}) 🎉`;
+    currentUnitBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  } else {
+    currentUnitText = `Unité ${currentUnitNum}/${sub.units.length} en cours`;
+    currentUnitBadgeClass = 'bg-amber-50 text-amber-800 border-amber-200';
+  }
+
   // Rendu de la grille des unités
   const unitsHtml = sub.units.map((maxUnits, idx) => {
     const done = subState.unitsDone[idx] || 0;
@@ -406,10 +429,17 @@ function renderSubjectCard(sub, state) {
                 ${percentSessions}%
               </span>
             </div>
-            <div class="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
+            <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 font-medium mt-0.5">
               <span>Séances : <b class="text-slate-800">${doneSubSessions}/${totalSubSessions}</b></span>
               <span>•</span>
               <span>Devoirs : <b class="text-slate-800">${doneDevoirs}/${totalDevoirs}</b> (${percentDevoirs}%)</span>
+            </div>
+            <!-- Badge unité en cours -->
+            <div class="mt-1.5">
+              <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg border ${currentUnitBadgeClass}">
+                <span>📍</span>
+                <span>${currentUnitText}</span>
+              </span>
             </div>
           </div>
         </div>

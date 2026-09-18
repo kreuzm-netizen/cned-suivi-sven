@@ -2,7 +2,7 @@
  * Service Worker pour le support hors-ligne de CNED Sven
  */
 
-const CACHE_NAME = 'cned-sven-cache-v2';
+const CACHE_NAME = 'cned-sven-cache-v3';
 const STATIC_ASSETS = [
   './',
   './index.html',

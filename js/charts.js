@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Module des graphiques et visualisations analytiques pour CNED Sven
  * Utilise Chart.js
  */
@@ -52,6 +52,22 @@ function getSubjectStats(sub, state) {
   // Score combiné matière (75% séances + 25% devoirs)
   const combinedScore = (pctSessions * 0.75) + (pctDevoirs * 0.25);
 
+  // Détermination de l'unité en cours
+  let currentUnitNum = 1;
+  let allUnitsCompleted = true;
+  for (let i = 0; i < sub.units.length; i++) {
+    const done = subState.unitsDone[i] || 0;
+    const max = sub.units[i];
+    if (done < max) {
+      currentUnitNum = i + 1;
+      allUnitsCompleted = false;
+      break;
+    }
+  }
+  const currentUnitText = allUnitsCompleted
+    ? `Toutes terminées (${sub.units.length}/${sub.units.length})`
+    : `Unité ${currentUnitNum}/${sub.units.length} en cours`;
+
   return {
     ...sub,
     totalSessions,
@@ -60,7 +76,8 @@ function getSubjectStats(sub, state) {
     totalDevoirs,
     doneDevoirs,
     pctDevoirs: Number(pctDevoirs.toFixed(1)),
-    combinedScore: Number(combinedScore.toFixed(1))
+    combinedScore: Number(combinedScore.toFixed(1)),
+    currentUnitText
   };
 }
 
@@ -372,9 +389,14 @@ function renderComparisonTable(state) {
 
     return `
       <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition text-xs">
-        <td class="py-3 px-3.5 font-bold text-slate-800 flex items-center gap-2">
-          <span class="text-base">${sub.icon}</span>
-          <span>${escapeHtml(sub.name)}</span>
+        <td class="py-3 px-3.5 font-bold text-slate-800">
+          <div class="flex items-center gap-2">
+            <span class="text-base">${sub.icon}</span>
+            <span>${escapeHtml(sub.name)}</span>
+          </div>
+          <div class="text-[10px] text-amber-700 font-semibold mt-0.5">
+            📍 ${escapeHtml(sub.currentUnitText)}
+          </div>
         </td>
         <td class="py-3 px-3 text-slate-700 font-semibold">
           ${sub.doneSessions} <span class="text-slate-400 font-normal">/ ${sub.totalSessions}</span>
