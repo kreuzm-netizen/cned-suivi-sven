@@ -107,7 +107,7 @@ export function getWorkDaysList(startDate, endDate) {
       const y = cur.getFullYear();
       const m = String(cur.getMonth() + 1).padStart(2, '0');
       const d = String(cur.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${day}`;
+      const dateStr = `${y}-${m}-${d}`;
       const dayName = dayNames[cur.getDay()];
       const fullDay = fullDayNames[cur.getDay()];
       const monthName = monthNames[cur.getMonth()];

@@ -63,15 +63,23 @@ export async function loginWithGoogle() {
   const auth = await getFirebaseAuth();
   if (!auth) throw new Error("Firebase n'est pas configuré.");
 
-  const { GoogleAuthProvider, signInWithPopup } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
+  const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  // On privilégie la popup qui ne recharge pas la page
-  const result = await signInWithPopup(auth, provider);
-  currentUser = result.user;
-  notifyAuth(currentUser);
-  return currentUser;
+  try {
+    const result = await signInWithPopup(auth, provider);
+    currentUser = result.user;
+    notifyAuth(currentUser);
+    return currentUser;
+  } catch (err) {
+    if (err.code === 'auth/popup-blocked') {
+      console.warn("Popup bloquée, basculement sur la connexion par redirection...", err);
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+    throw err;
+  }
 }
 
 export async function loginWithGoogleRedirect() {
