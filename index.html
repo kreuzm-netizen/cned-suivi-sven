@@ -146,16 +146,20 @@
 
     </section>
 
-    <!-- COMMUTATEUR DE VUE PRINCIPAL : TABLEAUX VS GRAPHIQUES -->
+    <!-- COMMUTATEUR DE VUE PRINCIPAL : TABLEAUX VS GRAPHIQUES VS PROGRESSION -->
     <div class="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-2.5 pt-1">
       <div class="inline-flex p-1 bg-slate-200/90 rounded-2xl text-xs font-bold shadow-xs">
-        <button id="btnViewCards" type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer">
+        <button id="btnViewCards" type="button" class="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer">
           <span class="text-sm">📋</span>
           <span>Tableaux & Matières</span>
         </button>
-        <button id="btnViewCharts" type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer">
+        <button id="btnViewCharts" type="button" class="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer">
           <span class="text-sm">📊</span>
           <span>Graphiques & Analyse</span>
+        </button>
+        <button id="btnViewPacing" type="button" class="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer">
+          <span class="text-sm">📈</span>
+          <span>Progression</span>
         </button>
       </div>
 
@@ -310,6 +314,156 @@
               <!-- Rendu dynamiquement en JS -->
             </tbody>
           </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 3. VUE PROGRESSION & RYTHME (CALENDRIER CNED) -->
+    <div id="viewPacingSection" class="hidden space-y-4">
+
+      <!-- RÉCAPITULATIF DU CALENDRIER & CADENCE RECOMMANDÉE -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <!-- Carte S1 -->
+        <div class="bg-white rounded-2xl p-4 border border-indigo-100 shadow-xs">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Semestre 1 (50%)</span>
+            <span class="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full">15 janv. 2027</span>
+          </div>
+          <div class="text-xl font-black text-slate-900 mt-1" id="pacingS1DaysDone">-- / 95 j</div>
+          <div class="text-xs text-slate-500 font-medium mt-0.5" id="pacingS1DaysRemaining">-- j restants</div>
+          <div class="text-[11px] text-indigo-600 font-medium mt-2">Cible : 280 séances &amp; 37 devoirs</div>
+        </div>
+
+        <!-- Carte S2 -->
+        <div class="bg-white rounded-2xl p-4 border border-emerald-100 shadow-xs">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-emerald-600">Semestre 2 (100%)</span>
+            <span class="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full">13 juin 2027</span>
+          </div>
+          <div class="text-xl font-black text-slate-900 mt-1" id="pacingS2DaysDone">-- / 110 j</div>
+          <div class="text-xs text-slate-500 font-medium mt-0.5" id="pacingS2DaysRemaining">-- j restants</div>
+          <div class="text-[11px] text-emerald-600 font-medium mt-2">Cible : 559 séances &amp; 74 devoirs</div>
+        </div>
+
+        <!-- Carte Année entière -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Année complète</span>
+            <span class="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full">205 jours</span>
+          </div>
+          <div class="text-xl font-black text-slate-900 mt-1" id="pacingYearDaysDone">-- / 205 j</div>
+          <div class="text-xs text-slate-500 font-medium mt-0.5" id="pacingYearDaysRemaining">-- j restants</div>
+          <div class="text-[11px] text-slate-500 font-medium mt-2">Lun-Sam (hors sem. 44, 53, 7, 15 &amp; fériés)</div>
+        </div>
+
+        <!-- Cadence requise actuelle -->
+        <div class="bg-gradient-to-br from-indigo-600 to-indigo-800 text-white rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-indigo-200">Cadence conseillée</span>
+              <span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-semibold">Par jour</span>
+            </div>
+            <div class="mt-1">
+              <div class="text-xs text-indigo-100">Séances : <span id="pacingCurrentRateSessions" class="text-sm font-bold text-white">--</span></div>
+              <div class="text-xs text-indigo-100 mt-1">Devoirs : <span id="pacingCurrentRateDevoirs" class="text-sm font-bold text-white">--</span></div>
+            </div>
+          </div>
+          <div class="text-[10px] text-indigo-200 mt-2 font-medium">Pour respecter l'échéance du semestre</div>
+        </div>
+      </div>
+
+      <!-- Graphique 1 : Semestre 1 -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span class="text-base">🎯</span>
+              <span>Semestre 1 : Rythme moyen par jour de travail (11 sept. 2026 → 15 janv. 2027)</span>
+            </h3>
+            <p class="text-xs text-slate-500">Objectif 50% des devoirs (37 devoirs) et 280 séances sur 95 jours travaillés</p>
+          </div>
+          <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 self-start sm:self-auto">
+            Échéance : 15 janvier 2027
+          </span>
+        </div>
+        <div class="relative h-72 sm:h-80 w-full">
+          <canvas id="chartPacingS1"></canvas>
+        </div>
+        <div class="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 flex flex-wrap gap-4 items-center justify-between">
+          <span>📌 <strong>Moyenne de référence S1 :</strong> 2.94 séances/jour &amp; 0.39 devoir/jour (~2.3 devoirs par semaine de 6 jours).</span>
+          <span>🏁 <strong>Cible mi-parcours :</strong> 50% de devoirs dans chaque matière.</span>
+        </div>
+      </div>
+
+      <!-- Graphique 2 : Semestre 2 -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span class="text-base">🚀</span>
+              <span>Semestre 2 : Rythme moyen par jour de travail (16 janv. 2027 → 13 juin 2027)</span>
+            </h3>
+            <p class="text-xs text-slate-500">Objectif 100% de l'année (74 devoirs et 559 séances) sur 110 jours travaillés</p>
+          </div>
+          <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 self-start sm:self-auto">
+            Échéance : 13 juin 2027
+          </span>
+        </div>
+        <div class="relative h-72 sm:h-80 w-full">
+          <canvas id="chartPacingS2"></canvas>
+        </div>
+        <div class="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 flex flex-wrap gap-4 items-center justify-between">
+          <span>📌 <strong>Moyenne de référence S2 :</strong> 2.54 séances/jour &amp; 0.34 devoir/jour (~2 devoirs par semaine de 6 jours).</span>
+          <span>🏁 <strong>Cible fin d'année :</strong> 100% des 74 devoirs officiels rendus.</span>
+        </div>
+      </div>
+
+      <!-- Graphique 3 : Année Globale -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span class="text-base">📊</span>
+              <span>Progression Annuelle Globale : Moyennes sur les 205 jours travaillés</span>
+            </h3>
+            <p class="text-xs text-slate-500">Vue d'ensemble sur la totalité de l'année scolaire (11 sept. 2026 → 13 juin 2027)</p>
+          </div>
+          <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-100 self-start sm:self-auto">
+            Total : 205 jours de travail
+          </span>
+        </div>
+        <div class="relative h-72 sm:h-80 w-full">
+          <canvas id="chartPacingGlobal"></canvas>
+        </div>
+        <div class="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 flex flex-wrap gap-4 items-center justify-between">
+          <span>📌 <strong>Moyenne de référence annuelle :</strong> 2.73 séances/jour &amp; 0.36 devoir/jour (~2.16 devoirs par semaine).</span>
+          <span>💡 Ce graphique compare en direct le rythme réel constaté et le rythme nécessaire pour terminer dans les temps.</span>
+        </div>
+      </div>
+
+      <!-- Panneau explicatif du calcul des jours -->
+      <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs text-slate-600 space-y-2">
+        <h4 class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+          <span>ℹ️</span> <span>Détail du calcul officiel du calendrier</span>
+        </h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div>
+            <p class="font-semibold text-slate-700 mb-1">📅 Règles d'organisation :</p>
+            <ul class="list-disc list-inside space-y-0.5 text-slate-600">
+              <li>Travail du <strong>lundi au samedi</strong> (6 jours par semaine).</li>
+              <li>Dimanches non travaillés.</li>
+              <li>Jours fériés officiels français exclus.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="font-semibold text-slate-700 mb-1">🏖️ Semaines de congés exclues :</p>
+            <ul class="list-disc list-inside space-y-0.5 text-slate-600">
+              <li><strong>2026 :</strong> Semaine 44 (26 oct - 31 oct) &amp; Semaine 53 (28 déc - 2 jan 2027).</li>
+              <li><strong>2027 :</strong> Semaine 7 (15 fév - 20 fév) &amp; Semaine 15 (12 avr - 17 avr).</li>
+              <li><strong>Bilan :</strong> 95 j (Semestre 1) + 110 j (Semestre 2) = <strong>205 jours travaillés</strong>.</li>
+            </ul>
+          </div>
         </div>
       </div>
 

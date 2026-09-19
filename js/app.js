@@ -7,6 +7,7 @@ import { initSync, setSession, setDevoir, getCurrentState, importFullState, rese
 import { getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured } from './firebase-config.js';
 import { initAuth, loginWithGoogle, logoutUser, getCurrentUser } from './auth.js';
 import { initChartsModule, renderCharts } from './charts.js';
+import { initPacingModule, renderPacingView } from './pacing.js';
 
 let activeFilter = 'all'; // 'all' | 'in_progress' | 'completed'
 let searchQuery = '';
@@ -20,6 +21,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   setupPwaInstall();
   setupAuthHandlers();
   initChartsModule();
+  initPacingModule();
   setupViewSwitcher();
 
   await initSync(
@@ -149,33 +151,50 @@ function getActiveUser() {
 }
 
 /* ============================================================
-   COMMUTATEUR DE VUE (TABLEAUX VS GRAPHIQUES)
+   COMMUTATEUR DE VUE (TABLEAUX VS GRAPHIQUES VS PROGRESSION)
    ============================================================ */
 function setupViewSwitcher() {
   const btnCards = document.getElementById("btnViewCards");
   const btnCharts = document.getElementById("btnViewCharts");
+  const btnPacing = document.getElementById("btnViewPacing");
   const viewCards = document.getElementById("viewCardsSection");
   const viewCharts = document.getElementById("viewChartsSection");
+  const viewPacing = document.getElementById("viewPacingSection");
 
-  if (!btnCards || !btnCharts) return;
+  const switchView = (activeBtn, activeSection) => {
+    [btnCards, btnCharts, btnPacing].forEach(btn => {
+      if (!btn) return;
+      if (btn === activeBtn) {
+        btn.className = "flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer font-bold";
+      } else {
+        btn.className = "flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer font-medium";
+      }
+    });
 
-  btnCards.addEventListener("click", () => {
-    btnCards.className = "flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer font-bold";
-    btnCharts.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer font-medium";
+    [viewCards, viewCharts, viewPacing].forEach(sec => {
+      if (!sec) return;
+      if (sec === activeSection) {
+        sec.classList.remove("hidden");
+      } else {
+        sec.classList.add("hidden");
+      }
+    });
+  };
 
-    viewCards?.classList.remove("hidden");
-    viewCharts?.classList.add("hidden");
+  btnCards?.addEventListener("click", () => {
+    switchView(btnCards, viewCards);
   });
 
-  btnCharts.addEventListener("click", () => {
-    btnCharts.className = "flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-indigo-700 shadow-xs transition cursor-pointer font-bold";
-    btnCards.className = "flex items-center gap-2 px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900 transition cursor-pointer font-medium";
-
-    viewCards?.classList.add("hidden");
-    viewCharts?.classList.remove("hidden");
-
-    // Déclencher le calcul et l'animation des graphiques
+  btnCharts?.addEventListener("click", () => {
+    switchView(btnCharts, viewCharts);
+    // Déclencher le calcul et l'animation des graphiques analytiques
     renderCharts(getCurrentState());
+  });
+
+  btnPacing?.addEventListener("click", () => {
+    switchView(btnPacing, viewPacing);
+    // Déclencher le calcul et l'animation des graphiques de rythme
+    renderPacingView(getCurrentState());
   });
 }
 
@@ -186,6 +205,7 @@ function onStateUpdated(state) {
   renderGlobalStats(state);
   renderSubjectsList(state);
   renderCharts(state);
+  renderPacingView(state);
 }
 
 function onActivitiesUpdated(activities) {
