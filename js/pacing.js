@@ -4,6 +4,7 @@
  */
 
 import { TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE } from './data.js';
+import { getCurrentDailyHistory, setDailyHistory, getTodayDateString } from './sync.js';
 
 // Dates clés du CNED
 export const CNED_DATES = {
@@ -29,6 +30,11 @@ const HOLIDAYS = [
 let chartS1Instance = null;
 let chartS2Instance = null;
 let chartGlobalInstance = null;
+
+let chartCurveS1Instance = null;
+let chartCurveS2Instance = null;
+let chartCurveGlobalInstance = null;
+
 let lastPacingState = null;
 
 /**
@@ -83,14 +89,58 @@ export function countWorkDays(startDate, endDate) {
   return count;
 }
 
-// Totaux fixes de jours travaillés
-export const WORKDAYS_S1_TOTAL = countWorkDays(CNED_DATES.start, CNED_DATES.s1End);   // 95 jours
-export const WORKDAYS_S2_TOTAL = countWorkDays(CNED_DATES.s2Start, CNED_DATES.s2End); // 110 jours
-export const WORKDAYS_YEAR_TOTAL = WORKDAYS_S1_TOTAL + WORKDAYS_S2_TOTAL;              // 205 jours
+/**
+ * Liste ordonnée de tous les jours travaillés avec métadonnées
+ */
+export function getWorkDaysList(startDate, endDate) {
+  const list = [];
+  const cur = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  let idx = 1;
+
+  const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  const fullDayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  const monthNames = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+  while (cur <= end) {
+    if (isWorkingDay(cur)) {
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth() + 1).padStart(2, '0');
+      const d = String(cur.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${day}`;
+      const dayName = dayNames[cur.getDay()];
+      const fullDay = fullDayNames[cur.getDay()];
+      const monthName = monthNames[cur.getMonth()];
+
+      list.push({
+        index: idx,
+        dateStr: dateStr,
+        shortDate: `${d}/${m}`,
+        dayName: dayName,
+        label: `J${idx} (${d}/${m})`,
+        fullLabel: `Jour ${idx} — ${fullDay} ${d} ${monthName} ${y}`
+      });
+      idx++;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return list;
+}
+
+// Totaux et listes des jours ouvrés
+export const S1_WORKDAYS = getWorkDaysList(CNED_DATES.start, CNED_DATES.s1End);     // 95 jours
+export const S2_WORKDAYS = getWorkDaysList(CNED_DATES.s2Start, CNED_DATES.s2End);   // 110 jours
+export const YEAR_WORKDAYS = getWorkDaysList(CNED_DATES.start, CNED_DATES.s2End);   // 205 jours
+
+export const WORKDAYS_S1_TOTAL = S1_WORKDAYS.length;   // 95 jours
+export const WORKDAYS_S2_TOTAL = S2_WORKDAYS.length;   // 110 jours
+export const WORKDAYS_YEAR_TOTAL = YEAR_WORKDAYS.length; // 205 jours
 
 // Objectifs S1 (50%) et Année (100%)
 export const S1_TARGET_SESSIONS = Math.round(TOTAL_SEANCES_ANNEE * 0.5); // 280 séances
 export const S1_TARGET_DEVOIRS = Math.round(TOTAL_DEVOIRS_ANNEE * 0.5);   // 37 devoirs
+export const S2_TARGET_SESSIONS = TOTAL_SEANCES_ANNEE - S1_TARGET_SESSIONS; // 279 séances
+export const S2_TARGET_DEVOIRS = TOTAL_DEVOIRS_ANNEE - S1_TARGET_DEVOIRS;   // 37 devoirs
 
 export function calculatePacingMetrics(state, refDate = new Date()) {
   // Calcul du cumul réalisé
@@ -223,8 +273,94 @@ export function calculatePacingMetrics(state, refDate = new Date()) {
   };
 }
 
+/**
+ * Construit les séries de données pour les courbes (Ligne droite attendue vs Réalisé)
+ */
+export function buildCurveData({ workdays, targetTotal, doneSessions, dailyHistory = {}, refDate = new Date() }) {
+  const todayStr = getTodayDateString(refDate);
+  const labels = [];
+  const fullDates = [];
+  const targetLine = [];
+  const realizedLine = [];
+
+  const N = workdays.length;
+  let todayIndex = -1;
+  for (let i = 0; i < N; i++) {
+    if (workdays[i].dateStr <= todayStr) {
+      todayIndex = i;
+    }
+  }
+
+  const isBeforeStart = todayStr < workdays[0].dateStr;
+
+  // Récupérer les points connus dans l'historique journalier
+  const known = {};
+  workdays.forEach((wd, i) => {
+    if (dailyHistory && typeof dailyHistory[wd.dateStr] === 'number') {
+      known[i] = dailyHistory[wd.dateStr];
+    }
+  });
+
+  // Si aujourd'hui est dans la période, le point actuel correspond à doneSessions
+  if (todayIndex >= 0 && known[todayIndex] === undefined) {
+    known[todayIndex] = doneSessions;
+  }
+
+  for (let i = 0; i < N; i++) {
+    const wd = workdays[i];
+    labels.push(wd.label);
+    fullDates.push(wd.fullLabel);
+
+    // Ligne droite cible (linéaire de 1 à N vers targetTotal)
+    const targetVal = Number((((i + 1) / N) * targetTotal).toFixed(1));
+    targetLine.push(targetVal);
+
+    if (isBeforeStart || wd.dateStr > todayStr) {
+      // Jours futurs : pas encore réalisés
+      realizedLine.push(null);
+    } else {
+      if (known[i] !== undefined) {
+        realizedLine.push(known[i]);
+      } else {
+        // Interpolation intelligente si des jours antérieurs n'avaient pas été saisis
+        let nextIdx = -1;
+        for (let k = i + 1; k < N; k++) {
+          if (known[k] !== undefined) {
+            nextIdx = k;
+            break;
+          }
+        }
+        let prevIdx = -1;
+        for (let k = i - 1; k >= 0; k--) {
+          if (known[k] !== undefined) {
+            prevIdx = k;
+            break;
+          }
+        }
+
+        const prevVal = prevIdx >= 0 ? known[prevIdx] : 0;
+        const nextVal = nextIdx >= 0 ? known[nextIdx] : doneSessions;
+        const span = (nextIdx >= 0 ? nextIdx : (todayIndex >= 0 ? todayIndex : i)) - (prevIdx >= 0 ? prevIdx : -1);
+        const offset = i - (prevIdx >= 0 ? prevIdx : -1);
+
+        const val = span > 0 ? prevVal + ((nextVal - prevVal) * (offset / span)) : nextVal;
+        realizedLine.push(Number(val.toFixed(1)));
+      }
+    }
+  }
+
+  return {
+    labels,
+    fullDates,
+    targetLine,
+    realizedLine,
+    todayIndex,
+    isBeforeStart
+  };
+}
+
 export function initPacingModule() {
-  // Pas d'écouteur complexe à lier
+  setupDailyHistoryModal();
 }
 
 export function renderPacingView(state) {
@@ -232,7 +368,16 @@ export function renderPacingView(state) {
   lastPacingState = state;
 
   const metrics = calculatePacingMetrics(state);
+  const dailyHistory = getCurrentDailyHistory();
+
   renderPacingKpiCards(metrics);
+
+  // 1. Nouvelles Courbes de progression (Jour en X vs Séances en Y)
+  renderCurveS1(metrics, dailyHistory);
+  renderCurveS2(metrics, dailyHistory);
+  renderCurveGlobal(metrics, dailyHistory);
+
+  // 2. Graphiques de rythme moyen journalier (Barres)
   renderS1Chart(metrics);
   renderS2Chart(metrics);
   renderGlobalPacingChart(metrics);
@@ -263,6 +408,330 @@ function renderPacingKpiCards(m) {
     const perWeek = (val * 6).toFixed(1);
     rateDev.textContent = `${val} / j (~${perWeek} / sem)`;
   }
+}
+
+/* ============================================================
+   COURBES DE PROGRESSION : JOURS (X) vs SÉANCES (Y)
+   ============================================================ */
+
+/**
+ * Courbe Semestre 1 : Jour en X (1 à 95) vs Séances en Y (0 à 280)
+ */
+function renderCurveS1(m, dailyHistory) {
+  const canvas = document.getElementById("chartCurveS1");
+  if (!canvas) return;
+
+  const done = Math.min(S1_TARGET_SESSIONS, m.doneSessions);
+  const data = buildCurveData({
+    workdays: S1_WORKDAYS,
+    targetTotal: S1_TARGET_SESSIONS,
+    doneSessions: done,
+    dailyHistory: dailyHistory
+  });
+
+  if (chartCurveS1Instance) {
+    chartCurveS1Instance.data.labels = data.labels;
+    chartCurveS1Instance.data.datasets[0].data = data.targetLine;
+    chartCurveS1Instance.data.datasets[1].data = data.realizedLine;
+    chartCurveS1Instance.data.datasets[1].pointRadius = (ctx) => {
+      if (ctx.dataIndex === data.todayIndex) return 6;
+      return ctx.raw !== null ? 2.5 : 0;
+    };
+    chartCurveS1Instance.resize();
+    chartCurveS1Instance.update();
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  chartCurveS1Instance = new window.Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [
+        {
+          label: '🎯 Ligne droite attendue (Cible 280 séances)',
+          data: data.targetLine,
+          borderColor: '#94a3b8',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: false,
+          tension: 0
+        },
+        {
+          label: '🚀 Réalisé effectif jour par jour',
+          data: data.realizedLine,
+          borderColor: '#4f46e5',
+          backgroundColor: 'rgba(79, 70, 229, 0.1)',
+          borderWidth: 2.5,
+          pointRadius: (ctx) => (ctx.dataIndex === data.todayIndex ? 6 : (ctx.raw !== null ? 2.5 : 0)),
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#4f46e5',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1.5,
+          fill: true,
+          tension: 0.2,
+          spanGaps: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { weight: 'bold', size: 11 }, usePointStyle: true }
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => data.fullDates[items[0].dataIndex] || items[0].label,
+            label: (ctx) => {
+              const val = ctx.raw;
+              if (val === null) return null;
+              if (ctx.datasetIndex === 0) {
+                return ` 🎯 Cible théorique : ${val} séances`;
+              } else {
+                const targetVal = ctx.chart.data.datasets[0].data[ctx.dataIndex];
+                const diff = Number((val - targetVal).toFixed(1));
+                const diffBadge = diff >= 0 ? `+${diff} en avance` : `${diff} de retard`;
+                return ` 🚀 Réalisé par Sven : ${val} séances (${diffBadge})`;
+              }
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { maxTicksLimit: 12, font: { size: 10 } },
+          title: { display: true, text: '95 Jours ouvrés du Semestre 1 (Lundi au Samedi)', font: { size: 10, weight: 'bold' } }
+        },
+        y: {
+          beginAtZero: true,
+          suggestedMax: 280,
+          grid: { color: 'rgba(226, 232, 240, 0.8)' },
+          ticks: { font: { size: 11 } },
+          title: { display: true, text: 'Séances cumulées', font: { size: 10, weight: 'bold' } }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Courbe Semestre 2 : Jour en X (1 à 110) vs Séances en Y (0 à 279)
+ */
+function renderCurveS2(m, dailyHistory) {
+  const canvas = document.getElementById("chartCurveS2");
+  if (!canvas) return;
+
+  const doneS2 = Math.max(0, m.doneSessions - S1_TARGET_SESSIONS);
+  const data = buildCurveData({
+    workdays: S2_WORKDAYS,
+    targetTotal: S2_TARGET_SESSIONS,
+    doneSessions: doneS2,
+    dailyHistory: dailyHistory
+  });
+
+  if (chartCurveS2Instance) {
+    chartCurveS2Instance.data.labels = data.labels;
+    chartCurveS2Instance.data.datasets[0].data = data.targetLine;
+    chartCurveS2Instance.data.datasets[1].data = data.realizedLine;
+    chartCurveS2Instance.data.datasets[1].pointRadius = (ctx) => {
+      if (ctx.dataIndex === data.todayIndex) return 6;
+      return ctx.raw !== null ? 2.5 : 0;
+    };
+    chartCurveS2Instance.resize();
+    chartCurveS2Instance.update();
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  chartCurveS2Instance = new window.Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [
+        {
+          label: '🎯 Ligne droite attendue (Objectif 279 séances S2)',
+          data: data.targetLine,
+          borderColor: '#94a3b8',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: false,
+          tension: 0
+        },
+        {
+          label: '🚀 Réalisé effectif S2',
+          data: data.realizedLine,
+          borderColor: '#059669',
+          backgroundColor: 'rgba(5, 150, 105, 0.1)',
+          borderWidth: 2.5,
+          pointRadius: (ctx) => (ctx.dataIndex === data.todayIndex ? 6 : (ctx.raw !== null ? 2.5 : 0)),
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#059669',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1.5,
+          fill: true,
+          tension: 0.2,
+          spanGaps: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { weight: 'bold', size: 11 }, usePointStyle: true }
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => data.fullDates[items[0].dataIndex] || items[0].label,
+            label: (ctx) => {
+              const val = ctx.raw;
+              if (val === null) return null;
+              if (ctx.datasetIndex === 0) {
+                return ` 🎯 Cible théorique : ${val} séances`;
+              } else {
+                const targetVal = ctx.chart.data.datasets[0].data[ctx.dataIndex];
+                const diff = Number((val - targetVal).toFixed(1));
+                const diffBadge = diff >= 0 ? `+${diff} en avance` : `${diff} de retard`;
+                return ` 🚀 Réalisé S2 : ${val} séances (${diffBadge})`;
+              }
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { maxTicksLimit: 12, font: { size: 10 } },
+          title: { display: true, text: '110 Jours ouvrés du Semestre 2 (Lundi au Samedi)', font: { size: 10, weight: 'bold' } }
+        },
+        y: {
+          beginAtZero: true,
+          suggestedMax: S2_TARGET_SESSIONS,
+          grid: { color: 'rgba(226, 232, 240, 0.8)' },
+          ticks: { font: { size: 11 } },
+          title: { display: true, text: 'Séances S2 cumulées', font: { size: 10, weight: 'bold' } }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Courbe Année Globale : 205 Jours en X vs 559 Séances en Y
+ */
+function renderCurveGlobal(m, dailyHistory) {
+  const canvas = document.getElementById("chartCurveGlobal");
+  if (!canvas) return;
+
+  const data = buildCurveData({
+    workdays: YEAR_WORKDAYS,
+    targetTotal: TOTAL_SEANCES_ANNEE,
+    doneSessions: m.doneSessions,
+    dailyHistory: dailyHistory
+  });
+
+  if (chartCurveGlobalInstance) {
+    chartCurveGlobalInstance.data.labels = data.labels;
+    chartCurveGlobalInstance.data.datasets[0].data = data.targetLine;
+    chartCurveGlobalInstance.data.datasets[1].data = data.realizedLine;
+    chartCurveGlobalInstance.data.datasets[1].pointRadius = (ctx) => {
+      if (ctx.dataIndex === data.todayIndex) return 6;
+      return ctx.raw !== null ? 2.5 : 0;
+    };
+    chartCurveGlobalInstance.resize();
+    chartCurveGlobalInstance.update();
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  chartCurveGlobalInstance = new window.Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [
+        {
+          label: '🎯 Ligne droite attendue (Objectif annuel 559 séances)',
+          data: data.targetLine,
+          borderColor: '#94a3b8',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: false,
+          tension: 0
+        },
+        {
+          label: '🚀 Réalisé effectif jour par jour',
+          data: data.realizedLine,
+          borderColor: '#7c3aed',
+          backgroundColor: 'rgba(124, 58, 237, 0.1)',
+          borderWidth: 2.5,
+          pointRadius: (ctx) => (ctx.dataIndex === data.todayIndex ? 6 : (ctx.raw !== null ? 2.5 : 0)),
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#7c3aed',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1.5,
+          fill: true,
+          tension: 0.2,
+          spanGaps: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { weight: 'bold', size: 11 }, usePointStyle: true }
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => data.fullDates[items[0].dataIndex] || items[0].label,
+            label: (ctx) => {
+              const val = ctx.raw;
+              if (val === null) return null;
+              if (ctx.datasetIndex === 0) {
+                return ` 🎯 Cible théorique : ${val} séances`;
+              } else {
+                const targetVal = ctx.chart.data.datasets[0].data[ctx.dataIndex];
+                const diff = Number((val - targetVal).toFixed(1));
+                const diffBadge = diff >= 0 ? `+${diff} en avance` : `${diff} de retard`;
+                return ` 🚀 Réalisé par Sven : ${val} séances (${diffBadge})`;
+              }
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { maxTicksLimit: 14, font: { size: 10 } },
+          title: { display: true, text: '205 Jours ouvrés de l\'année entière (11 sept. 2026 → 13 juin 2027)', font: { size: 10, weight: 'bold' } }
+        },
+        y: {
+          beginAtZero: true,
+          suggestedMax: TOTAL_SEANCES_ANNEE,
+          grid: { color: 'rgba(226, 232, 240, 0.8)' },
+          ticks: { font: { size: 11 } },
+          title: { display: true, text: 'Séances cumulées', font: { size: 10, weight: 'bold' } }
+        }
+      }
+    }
+  });
 }
 
 /**
@@ -500,4 +969,136 @@ function renderGlobalPacingChart(m) {
       }
     }
   });
+}
+
+/* ============================================================
+   MODAL DE GESTION DE L'HISTORIQUE JOURNALIER
+   ============================================================ */
+
+function setupDailyHistoryModal() {
+  const modal = document.getElementById("modalDailyHistory");
+  const btnOpen = document.getElementById("btnOpenDailyHistory");
+  const btnClose = document.getElementById("btnCloseDailyHistory");
+  const btnCancel = document.getElementById("btnCancelDailyHistory");
+  const btnSave = document.getElementById("btnSaveDailyHistory");
+  const btnSmooth = document.getElementById("btnSmoothHistory");
+
+  if (!modal) return;
+
+  const closeModal = () => modal.classList.add("hidden");
+  const openModal = () => {
+    populateDailyHistoryModal();
+    modal.classList.remove("hidden");
+  };
+
+  btnOpen?.addEventListener("click", openModal);
+  btnClose?.addEventListener("click", closeModal);
+  btnCancel?.addEventListener("click", closeModal);
+
+  btnSave?.addEventListener("click", async () => {
+    const inputs = modal.querySelectorAll("input[data-date]");
+    const updated = { ...getCurrentDailyHistory() };
+    inputs.forEach(inp => {
+      const date = inp.getAttribute("data-date");
+      const val = parseFloat(inp.value);
+      if (!isNaN(val)) {
+        updated[date] = Math.max(0, Math.round(val));
+      }
+    });
+
+    await setDailyHistory(updated);
+    closeModal();
+    if (lastPacingState) {
+      renderPacingView(lastPacingState);
+    }
+  });
+
+  btnSmooth?.addEventListener("click", () => {
+    const inputs = Array.from(modal.querySelectorAll("input[data-date]"));
+    if (inputs.length === 0) return;
+
+    // Récupérer le total de la dernière journée ou du total actuel
+    const lastInput = inputs[inputs.length - 1];
+    let totalDone = parseFloat(lastInput.value) || 0;
+    if (totalDone === 0 && lastPacingState) {
+      const m = calculatePacingMetrics(lastPacingState);
+      totalDone = m.doneSessions;
+    }
+
+    const n = inputs.length;
+    inputs.forEach((inp, idx) => {
+      const interpolated = Math.round(((idx + 1) / n) * totalDone);
+      inp.value = interpolated;
+    });
+  });
+}
+
+function populateDailyHistoryModal() {
+  const container = document.getElementById("dailyHistoryList");
+  if (!container) return;
+
+  const todayStr = getTodayDateString();
+  const dailyHistory = getCurrentDailyHistory();
+  const pastDays = YEAR_WORKDAYS.filter(wd => wd.dateStr <= todayStr);
+
+  let currentDoneTotal = 0;
+  if (lastPacingState) {
+    const m = calculatePacingMetrics(lastPacingState);
+    currentDoneTotal = m.doneSessions;
+  }
+
+  if (pastDays.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-6 text-slate-400 text-xs italic">
+        L'année scolaire CNED débute le 11 septembre 2026.
+      </div>
+    `;
+    return;
+  }
+
+  let html = '';
+  pastDays.forEach((wd, i) => {
+    const isToday = wd.dateStr === todayStr;
+    const targetVal = Number((((i + 1) / WORKDAYS_S1_TOTAL) * S1_TARGET_SESSIONS).toFixed(1));
+    
+    // Valeur enregistrée ou estimée
+    let val = dailyHistory[wd.dateStr];
+    if (val === undefined) {
+      if (isToday) {
+        val = currentDoneTotal;
+      } else {
+        // Progression linéaire estimée par défaut
+        val = Math.round(((i + 1) / pastDays.length) * currentDoneTotal);
+      }
+    }
+
+    html += `
+      <div class="flex items-center justify-between py-2.5 px-2 hover:bg-slate-50 rounded-xl transition ${isToday ? 'bg-indigo-50/50 border border-indigo-100/70' : ''}">
+        <div>
+          <div class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+            <span>${wd.fullLabel}</span>
+            ${isToday ? '<span class="text-[10px] bg-indigo-600 text-white px-1.5 py-0.2 rounded-md font-bold">Aujourd\'hui</span>' : ''}
+          </div>
+          <div class="text-[11px] text-slate-400">
+            Cible attendue à ce jour : <span class="font-semibold text-slate-600">${targetVal} séances</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label class="text-[11px] text-slate-500 font-medium">Cumul :</label>
+          <input 
+            type="number" 
+            min="0" 
+            max="559" 
+            data-date="${wd.dateStr}" 
+            value="${val}" 
+            class="w-20 px-2 py-1 text-xs font-bold text-center bg-white border border-slate-200 rounded-lg text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+          >
+          <span class="text-xs text-slate-400 font-medium">séances</span>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
 }

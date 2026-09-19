@@ -3,7 +3,7 @@
  */
 
 import { CNED_SUBJECTS, TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE } from './data.js';
-import { initSync, setSession, setDevoir, getCurrentState, importFullState, resetAllState, setupFirebase } from './sync.js';
+import { initSync, setSession, setDevoir, getCurrentState, importFullState, resetAllState, setupFirebase, getCurrentDailyHistory, setDailyHistory } from './sync.js';
 import { getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured } from './firebase-config.js';
 import { initAuth, loginWithGoogle, logoutUser, getCurrentUser } from './auth.js';
 import { initChartsModule, renderCharts } from './charts.js';
@@ -705,6 +705,7 @@ function exportJsonData() {
   const data = {
     exportedAt: new Date().toISOString(),
     state: getCurrentState(),
+    dailyHistory: getCurrentDailyHistory(),
     metadata: {
       student: "Sven",
       program: "CNED",
@@ -760,6 +761,9 @@ async function importJsonFile(e) {
       if (parsed && parsed.state) {
         if (confirm("Remplacer les données actuelles par la sauvegarde sélectionnée ?")) {
           await importFullState(parsed.state, getActiveUser());
+          if (parsed.dailyHistory && typeof parsed.dailyHistory === 'object') {
+            await setDailyHistory(parsed.dailyHistory, getActiveUser());
+          }
           alert("Données importées avec succès !");
           document.getElementById("modalExport")?.classList.add("hidden");
         }

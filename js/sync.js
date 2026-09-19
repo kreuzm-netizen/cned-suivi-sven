@@ -8,11 +8,24 @@ import { getCurrentUser } from './auth.js';
 
 const LOCAL_DATA_KEY = "cned_sven_progress_data_v1";
 const LOCAL_ACTIVITIES_KEY = "cned_sven_activities_v1";
+const LOCAL_HISTORY_KEY = "cned_sven_daily_history_v1";
 
 let currentState = getInitialState();
 let currentActivities = [];
+let currentDailyHistory = {};
 let firestoreDb = null;
 let unsubscribeFirestore = null;
+
+export function getTodayDateString(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function getCurrentDailyHistory() {
+  return currentDailyHistory;
+}
 
 // Callbacks UI
 let onStateChangedCb = null;
@@ -93,11 +106,21 @@ function loadLocalData() {
       currentActivities = [];
     }
   }
+
+  const savedHist = localStorage.getItem(LOCAL_HISTORY_KEY);
+  if (savedHist) {
+    try {
+      currentDailyHistory = JSON.parse(savedHist);
+    } catch (e) {
+      currentDailyHistory = {};
+    }
+  }
 }
 
 function saveLocalData() {
   localStorage.setItem(LOCAL_DATA_KEY, JSON.stringify(currentState));
   localStorage.setItem(LOCAL_ACTIVITIES_KEY, JSON.stringify(currentActivities));
+  localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(currentDailyHistory));
 }
 
 export async function setupFirebase() {
@@ -135,6 +158,10 @@ export async function setupFirebase() {
           currentActivities = data.activities;
           saveLocalData();
           if (onActivityChangedCb) onActivityChangedCb(currentActivities);
+        }
+        if (data && data.dailyHistory && typeof data.dailyHistory === 'object') {
+          currentDailyHistory = data.dailyHistory;
+          saveLocalData();
         }
       } else {
         // Document inexistant dans le cloud : initialiser avec les données actuelles
@@ -179,11 +206,19 @@ async function pushToCloud(state, activities) {
     await setDoc(docRef, {
       state: state,
       activities: activities,
+      dailyHistory: currentDailyHistory,
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (e) {
     console.error("Erreur lors de l'enregistrement dans le Cloud :", e);
   }
+}
+
+export async function setDailyHistory(newHistory, author = "Ajustement historique") {
+  currentDailyHistory = { ...newHistory };
+  saveLocalData();
+  if (onStateChangedCb) onStateChangedCb(currentState);
+  await pushToCloud(currentState, currentActivities);
 }
 
 export async function setSession(subjectId, unitIndex, newCount, author = "Anonyme") {
@@ -197,6 +232,16 @@ export async function setSession(subjectId, unitIndex, newCount, author = "Anony
   if (count === oldCount) return;
 
   currentState[subjectId].unitsDone[unitIndex] = count;
+
+  // Mettre à jour l'historique de la journée courante
+  let totalDoneSessions = 0;
+  CNED_SUBJECTS.forEach(s => {
+    const uDone = currentState[s.id]?.unitsDone;
+    if (Array.isArray(uDone)) {
+      totalDoneSessions += uDone.reduce((a, b) => a + (b || 0), 0);
+    }
+  });
+  currentDailyHistory[getTodayDateString()] = totalDoneSessions;
 
   let effectiveAuthor = author;
   if (!effectiveAuthor || effectiveAuthor === "Anonyme") {
