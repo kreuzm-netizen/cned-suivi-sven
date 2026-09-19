@@ -40,11 +40,13 @@ C'est tout ! Dès lors, tous les appareils connectés à cette application parta
 
 ---
 
-## 🔐 2b. Connexion Google & Domaines autorisés
+## 🔐 2b. Connexion Google & Accès Direct
 
-L'application intègre désormais la connexion obligatoire via Google pour sécuriser l'accès et enregistrer qui a validé chaque séance.
+L'application propose la connexion via Google ainsi que l'accès direct sans compte :
+- **Accès direct** : Toute la famille peut immédiatement consulter et enregistrer les séances sans avoir besoin d'un compte Google. Vous pouvez définir votre prénom en 1 clic.
+- **Connexion Google (optionnelle)** : Permet d'afficher votre nom et votre photo de profil Google sur l'historique des séances.
 
-### Autoriser votre site dans Firebase Authentication (Indispensable) :
+### Autoriser votre site dans Firebase Authentication (pour activer la connexion Google) :
 1. Sur [console.firebase.google.com](https://console.firebase.google.com), ouvrez le projet **cned-sven**.
 2. Dans le menu de gauche, cliquez sur **« Authentication »** puis sur l'onglet **« Paramètres »** (Settings).
 3. Cliquez sur **« Domaines autorisés »** (Authorized domains) puis sur **« Ajouter un domaine »**.
@@ -52,7 +54,7 @@ L'application intègre désormais la connexion obligatoire via Google pour sécu
    `kreuzm-netizen.github.io` *(sans http ni slash)*.
 5. Cliquez sur **« Enregistrer »**.
 
-Désormais, toute la famille peut se connecter en 1 clic avec son compte Google depuis son téléphone ou son PC !
+Dès que ce domaine est ajouté, la connexion Google fonctionne instantanément sur tous vos appareils !
 
 ---
 

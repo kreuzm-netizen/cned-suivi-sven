@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Module d'authentification Google via Firebase Auth
  */
 import { getSharedFirebaseApp } from './firebase-config.js';
@@ -16,7 +16,7 @@ export async function getFirebaseAuth() {
   return firebaseAuth;
 }
 
-export async function initAuth(onUserChange) {
+export async function initAuth(onUserChange, onRedirectError) {
   if (onUserChange && !authListeners.includes(onUserChange)) {
     authListeners.push(onUserChange);
   }
@@ -35,6 +35,9 @@ export async function initAuth(onUserChange) {
       }
     } catch (e) {
       console.warn("Résultat redirection Auth :", e);
+      if (onRedirectError) {
+        onRedirectError(e);
+      }
     }
 
     onAuthStateChanged(auth, (user) => {
@@ -60,27 +63,25 @@ export async function loginWithGoogle() {
   const auth = await getFirebaseAuth();
   if (!auth) throw new Error("Firebase n'est pas configuré.");
 
-  const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
+  const { GoogleAuthProvider, signInWithPopup } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  try {
-    const result = await signInWithPopup(auth, provider);
-    currentUser = result.user;
-    notifyAuth(currentUser);
-    return currentUser;
-  } catch (err) {
-    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
-      console.warn("Popup bloquée, tentative de connexion par redirection...", err);
-      try {
-        await signInWithRedirect(auth, provider);
-      } catch (redirectErr) {
-        throw redirectErr;
-      }
-    } else {
-      throw err;
-    }
-  }
+  // On privilégie la popup qui ne recharge pas la page
+  const result = await signInWithPopup(auth, provider);
+  currentUser = result.user;
+  notifyAuth(currentUser);
+  return currentUser;
+}
+
+export async function loginWithGoogleRedirect() {
+  const auth = await getFirebaseAuth();
+  if (!auth) throw new Error("Firebase n'est pas configuré.");
+
+  const { GoogleAuthProvider, signInWithRedirect } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  await signInWithRedirect(auth, provider);
 }
 
 export async function logoutUser() {

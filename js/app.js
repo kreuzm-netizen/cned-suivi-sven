@@ -13,8 +13,6 @@ let activeFilter = 'all'; // 'all' | 'in_progress' | 'completed'
 let searchQuery = '';
 let openSubjects = new Set(); // Toutes repliées par défaut
 let deferredPrompt = null;
-let isReadOnlyMode = false;
-
 // Initialisation au chargement de la page
 window.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
@@ -30,75 +28,189 @@ window.addEventListener('DOMContentLoaded', async () => {
     onStatusUpdated
   );
 
-  await initAuth(onAuthUserChanged);
+  await initAuth(onAuthUserChanged, (redirectErr) => {
+    displayAuthError(redirectErr);
+  });
 });
 
 /* ============================================================
-   GESTION DE L'AUTHENTIFICATION GOOGLE & PROFIL
+   GESTION DE L'AUTHENTIFICATION GOOGLE & PROFIL FAMILLE
    ============================================================ */
 function setupAuthHandlers() {
   document.getElementById("btnLoginGoogle")?.addEventListener("click", handleGoogleLogin);
-  document.getElementById("btnHeaderLogin")?.addEventListener("click", handleGoogleLogin);
+  document.getElementById("btnHeaderLogin")?.addEventListener("click", () => {
+    showLoginOverlay();
+  });
   document.getElementById("btnHeaderLogout")?.addEventListener("click", handleGoogleLogout);
   
-  document.getElementById("btnBrowseReadOnly")?.addEventListener("click", () => {
-    isReadOnlyMode = true;
-    hideLoginOverlay();
+  // Fermeture ou accès direct sans Google
+  document.getElementById("btnCloseLoginOverlay")?.addEventListener("click", window.dismissLoginOverlay);
+  document.getElementById("btnDirectAccess")?.addEventListener("click", window.dismissLoginOverlay);
+
+  // Clic sur l'arrière-plan sombre pour fermer l'overlay
+  const overlay = document.getElementById("loginOverlay");
+  if (overlay) {
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        window.dismissLoginOverlay();
+      }
+    });
+  }
+
+  // Édition rapide du prénom d'auteur local
+  document.getElementById("localUserBadge")?.addEventListener("click", () => {
+    const current = localStorage.getItem("cned_sven_author_name") || "Famille Sven";
+    const res = prompt("Votre prénom pour signer les séances et devoirs :", current);
+    if (res !== null && res.trim()) {
+      localStorage.setItem("cned_sven_author_name", res.trim());
+      updateLocalUserBadgeText();
+    }
   });
+
+  updateLocalUserBadgeText();
+}
+
+window.dismissLoginOverlay = () => {
+  const inputAuthor = document.getElementById("inputAuthorNickname");
+  if (inputAuthor && inputAuthor.value.trim()) {
+    localStorage.setItem("cned_sven_author_name", inputAuthor.value.trim());
+  }
+  localStorage.setItem("cned_sven_login_dismissed", "true");
+  hideLoginOverlay();
+  updateLocalUserBadgeText();
+};
+
+function updateLocalUserBadgeText() {
+  const badgeText = document.getElementById("localUserDisplayName");
+  if (badgeText) {
+    badgeText.textContent = getActiveUser();
+  }
+  const inputAuthor = document.getElementById("inputAuthorNickname");
+  if (inputAuthor) {
+    const saved = localStorage.getItem("cned_sven_author_name") || "";
+    inputAuthor.value = saved;
+  }
 }
 
 async function handleGoogleLogin() {
   const errorEl = document.getElementById("loginError");
+  const btn = document.getElementById("btnLoginGoogle");
+  const btnText = document.getElementById("btnLoginGoogleText");
+
   if (errorEl) {
     errorEl.classList.add("hidden");
-    errorEl.textContent = "";
+    errorEl.innerHTML = "";
   }
+
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = "Connexion en cours...";
 
   try {
     const user = await loginWithGoogle();
     if (user) {
+      localStorage.setItem("cned_sven_login_dismissed", "true");
       hideLoginOverlay();
-      isReadOnlyMode = false;
     }
   } catch (err) {
     console.error("Erreur lors de la connexion Google :", err);
-    if (errorEl) {
-      errorEl.classList.remove("hidden");
-      if (err.code === 'auth/unauthorized-domain') {
-        const currentHost = window.location.hostname;
-        errorEl.innerHTML = `
-          <strong>Domaine non autorisé dans Firebase</strong> :<br>
-          Veuillez aller dans la console Firebase &gt; <em>Authentication</em> &gt; <em>Paramètres</em> &gt; <em>Domaines autorisés</em>, et ajouter : <code class="bg-rose-100 px-1 py-0.5 rounded font-mono font-bold text-rose-800">${escapeHtml(currentHost)}</code>.
-        `;
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        errorEl.textContent = "La fenêtre de connexion a été fermée avant la fin de l'opération.";
-      } else {
-        errorEl.textContent = `Erreur de connexion : ${err.message || err.code || "Vérifiez votre connexion"}`;
+    displayAuthError(err);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = "Continuer avec Google";
+  }
+}
+
+function displayAuthError(err) {
+  if (!err) return;
+  const errorEl = document.getElementById("loginError");
+  if (!errorEl) return;
+
+  errorEl.classList.remove("hidden");
+
+  if (err.code === 'auth/unauthorized-domain') {
+    const currentHost = window.location.hostname;
+    errorEl.innerHTML = `
+      <div class="space-y-2 text-xs">
+        <div class="font-bold flex items-center gap-1.5 text-rose-800">
+          <span>⚠️</span>
+          <span>Domaine non autorisé dans Firebase</span>
+        </div>
+        <p class="text-slate-700">
+          Pour autoriser la connexion Google sur cette adresse (<code class="font-bold text-rose-800 font-mono">${escapeHtml(currentHost)}</code>), ce domaine doit être ajouté dans votre console Firebase :
+        </p>
+        <ol class="list-decimal list-inside space-y-1 text-slate-600 text-[11px] bg-white/80 p-2.5 rounded-xl border border-rose-200">
+          <li>Ouvrez <a href="https://console.firebase.google.com/" target="_blank" class="text-indigo-600 font-bold underline">console.firebase.google.com</a></li>
+          <li>Projet <strong>cned-sven</strong> &gt; <strong>Authentication</strong> &gt; <strong>Paramètres</strong> &gt; onglet <strong>Domaines autorisés</strong></li>
+          <li>Cliquez sur <strong>« Ajouter un domaine »</strong> et collez : <code class="font-bold text-indigo-700 font-mono select-all">${escapeHtml(currentHost)}</code></li>
+        </ol>
+        <div class="pt-1">
+          <button type="button" onclick="window.dismissLoginOverlay()" class="w-full py-2.5 px-3 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition cursor-pointer">
+            🚀 Utiliser l'application directement sans connexion
+          </button>
+        </div>
+      </div>
+    `;
+    showLoginOverlay();
+  } else if (err.code === 'auth/popup-closed-by-user') {
+    errorEl.innerHTML = `
+      <div class="text-slate-700 text-xs">
+        La fenêtre de connexion a été fermée. Vous pouvez réessayer ou continuer directement sans compte.
+      </div>
+    `;
+  } else if (err.code === 'auth/popup-blocked') {
+    errorEl.innerHTML = `
+      <div class="space-y-2 text-xs">
+        <p class="text-slate-700">
+          Votre navigateur a bloqué la fenêtre popup de connexion Google.
+        </p>
+        <button id="btnTryRedirectLogin" type="button" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition">
+          🔗 Tenter la connexion par redirection
+        </button>
+      </div>
+    `;
+    document.getElementById("btnTryRedirectLogin")?.addEventListener("click", async () => {
+      try {
+        const { loginWithGoogleRedirect } = await import("./auth.js");
+        await loginWithGoogleRedirect();
+      } catch (e) {
+        displayAuthError(e);
       }
-    }
+    });
+  } else {
+    errorEl.innerHTML = `
+      <div class="text-rose-800 text-xs">
+        Erreur de connexion (${escapeHtml(err.code || 'inconnue')}) : ${escapeHtml(err.message || 'Impossible de joindre Google')}
+      </div>
+      <div class="pt-1">
+        <button type="button" onclick="window.dismissLoginOverlay()" class="w-full py-2 px-3 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition cursor-pointer">
+          🚀 Continuer sans compte
+        </button>
+      </div>
+    `;
   }
 }
 
 async function handleGoogleLogout() {
   if (confirm("Voulez-vous vous déconnecter de votre compte Google ?")) {
     await logoutUser();
-    showLoginOverlay();
+    updateLocalUserBadgeText();
   }
 }
 
 function onAuthUserChanged(user) {
   const userProfileBadge = document.getElementById("userProfileBadge");
+  const localUserBadge = document.getElementById("localUserBadge");
   const btnHeaderLogin = document.getElementById("btnHeaderLogin");
   const userDisplayName = document.getElementById("userDisplayName");
   const userAvatar = document.getElementById("userAvatar");
   const userAvatarFallback = document.getElementById("userAvatarFallback");
 
   if (user) {
-    // Connecté
+    // Connecté via Google
     hideLoginOverlay();
-    isReadOnlyMode = false;
 
     if (userProfileBadge) userProfileBadge.classList.remove("hidden");
+    if (localUserBadge) localUserBadge.classList.add("hidden");
     if (btnHeaderLogin) btnHeaderLogin.classList.add("hidden");
     
     const name = user.displayName || user.email?.split('@')[0] || "Élève CNED";
@@ -119,9 +231,15 @@ function onAuthUserChanged(user) {
   } else {
     // Déconnecté
     if (userProfileBadge) userProfileBadge.classList.add("hidden");
+    if (localUserBadge) {
+      localUserBadge.classList.remove("hidden");
+      updateLocalUserBadgeText();
+    }
     if (btnHeaderLogin) btnHeaderLogin.classList.remove("hidden");
 
-    if (!isReadOnlyMode) {
+    // Afficher l'overlay UNIQUEMENT si l'utilisateur ne l'a jamais écarté
+    const hasDismissed = localStorage.getItem("cned_sven_login_dismissed") === "true";
+    if (!hasDismissed) {
       showLoginOverlay();
     }
   }
@@ -131,7 +249,7 @@ function showLoginOverlay(msg = "") {
   const overlay = document.getElementById("loginOverlay");
   const errorEl = document.getElementById("loginError");
   if (msg && errorEl) {
-    errorEl.textContent = msg;
+    errorEl.innerHTML = `<div class="text-slate-700 text-xs">${escapeHtml(msg)}</div>`;
     errorEl.classList.remove("hidden");
   }
   if (overlay) overlay.classList.remove("hidden");
@@ -147,7 +265,11 @@ function getActiveUser() {
   if (u) {
     return u.displayName || u.email?.split('@')[0] || "Utilisateur Google";
   }
-  return "Visiteur";
+  const localName = localStorage.getItem("cned_sven_author_name");
+  if (localName && localName.trim()) {
+    return localName.trim();
+  }
+  return "Famille Sven";
 }
 
 /* ============================================================
@@ -526,10 +648,8 @@ function attachSubjectEvents() {
    ACTIONS UTILISATEUR & GESTION DES CLICS
    ============================================================ */
 function requireLogin() {
-  if (!getCurrentUser()) {
-    showLoginOverlay("Veuillez vous connecter avec votre compte Google pour enregistrer des séances.");
-    return false;
-  }
+  // L'application ne bloque jamais la saisie : si l'utilisateur n'est pas connecté
+  // à Google, la séance est enregistrée avec le nom d'auteur local (ou 'Famille Sven').
   return true;
 }
 
