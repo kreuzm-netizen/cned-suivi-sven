@@ -200,6 +200,64 @@
     <!-- 2. VUE GRAPHIQUES & STATISTIQUES (ANALYTIQUE) -->
     <div id="viewChartsSection" class="hidden space-y-4">
 
+      <!-- NOUVELLE SECTION : PROCHAINS DEVOIRS (SÉANCES RÉALISÉES & MANQUANTES) -->
+      <section class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
+        
+        <!-- En-tête de la section -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span class="text-base sm:text-lg">🎯</span>
+              <span>Objectif Prochains Devoirs : Séances réalisées &amp; manquantes</span>
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Décompte dynamique des séances restant à faire avant chaque dépôt de devoir officiel CNED
+            </p>
+          </div>
+
+          <!-- Contrôles : Filtres rapides et Tri -->
+          <div class="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            <!-- Filtre statut -->
+            <div class="inline-flex p-1 bg-slate-100 rounded-xl text-xs font-bold">
+              <button id="filterNextDevoirAll" class="px-2.5 py-1 rounded-lg bg-white shadow-2xs text-slate-800 transition">Toutes (<span id="countDevoirAll">10</span>)</button>
+              <button id="filterNextDevoirInProgress" class="px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition">⏳ En cours (<span id="countDevoirInProgress">0</span>)</button>
+              <button id="filterNextDevoirReady" class="px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition">🎯 Prêts (<span id="countDevoirReady">0</span>)</button>
+              <button id="filterNextDevoirDone" class="px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition">🏆 Terminés (<span id="countDevoirDone">0</span>)</button>
+            </div>
+
+            <!-- Sélecteur de tri -->
+            <div class="flex items-center gap-1.5 text-xs font-semibold">
+              <select id="nextDevoirSortSelect" class="bg-slate-100 border border-slate-200/60 rounded-xl px-2.5 py-1.5 text-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                <option value="missing_asc">🎯 Les plus proches d'abord (moins de séances)</option>
+                <option value="missing_desc">⏳ Plus de séances manquantes</option>
+                <option value="pct_desc">📈 Avancement % décroissant</option>
+                <option value="default">Ordre officiel CNED</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode d'affichage : Barres de progrès détaillées vs Graphique comparatif -->
+        <div class="flex items-center justify-between gap-2">
+          <div class="inline-flex p-0.5 bg-slate-100 rounded-lg text-xs font-semibold">
+            <button id="btnToggleDevoirCards" class="px-3 py-1 rounded-md bg-white shadow-2xs text-indigo-700 font-bold transition">📊 Barres détaillées</button>
+            <button id="btnToggleDevoirChart" class="px-3 py-1 rounded-md text-slate-600 hover:text-slate-900 transition">📈 Graphique comparatif</button>
+          </div>
+          <span class="text-[11px] text-slate-400 font-medium hidden sm:inline">Décompte recalculé automatiquement à chaque dépôt de devoir</span>
+        </div>
+
+        <!-- 1. GRILLE DES CARTES DE PROGRESSION PAR MATIÈRE (Visible par défaut) -->
+        <div id="nextDevoirCardsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- Rendu dynamique en JS -->
+        </div>
+
+        <!-- 2. GRAPHIQUE HORIZONTAL COMPARATIF (Commutable) -->
+        <div id="nextDevoirChartWrapper" class="hidden relative h-80 sm:h-96 w-full pt-2">
+          <canvas id="chartNextDevoirHorizontal"></canvas>
+        </div>
+
+      </section>
+
       <!-- Carte 1 : Comparatif des 10 Matières (Barres groupées) -->
       <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">

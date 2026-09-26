@@ -2,7 +2,7 @@
  * Application principale de suivi CNED pour Sven
  */
 
-import { CNED_SUBJECTS, TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE } from './data.js';
+import { CNED_SUBJECTS, TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE, getNextDevoirInfo } from './data.js';
 import { initSync, setSession, setDevoir, getCurrentState, importFullState, resetAllState, setupFirebase, getCurrentDailyHistory, setDailyHistory } from './sync.js';
 import { getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured } from './firebase-config.js';
 import { initAuth, loginWithGoogle, logoutUser, getCurrentUser } from './auth.js';
@@ -414,6 +414,7 @@ function renderSubjectCard(sub, state) {
 
   const isOpen = openSubjects.has(sub.id);
   const isFinished = (doneSubSessions >= totalSubSessions && doneDevoirs >= totalDevoirs);
+  const nextDevoirInfo = getNextDevoirInfo(sub.id, state);
 
   // Détermination de l'unité en cours
   let currentUnitNum = 1;
@@ -503,12 +504,18 @@ function renderSubjectCard(sub, state) {
               <span>•</span>
               <span>Devoirs : <b class="text-slate-800">${doneDevoirs}/${totalDevoirs}</b> (${percentDevoirs}%)</span>
             </div>
-            <!-- Badge unité en cours -->
-            <div class="mt-1.5">
+            <!-- Badges unité en cours & prochain devoir -->
+            <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
               <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg border ${currentUnitBadgeClass}">
                 <span>📍</span>
                 <span>${currentUnitText}</span>
               </span>
+              ${nextDevoirInfo ? `
+                <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg border ${nextDevoirInfo.nextDevoirBadgeClass}">
+                  <span>${nextDevoirInfo.isAllCompleted ? '🏆' : (nextDevoirInfo.isReadyToSubmit ? '🎯' : '📝')}</span>
+                  <span>${escapeHtml(nextDevoirInfo.nextDevoirBadgeText)}</span>
+                </span>
+              ` : ''}
             </div>
           </div>
         </div>

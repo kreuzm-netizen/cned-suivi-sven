@@ -3,14 +3,18 @@
  * Utilise Chart.js
  */
 
-import { CNED_SUBJECTS, TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE } from './data.js';
+import { CNED_SUBJECTS, TOTAL_SEANCES_ANNEE, TOTAL_DEVOIRS_ANNEE, getNextDevoirInfo } from './data.js';
 
 let barChartInstance = null;
 let radarChartInstance = null;
 let sessionsDoughnutInstance = null;
 let devoirsDoughnutInstance = null;
+let nextDevoirHorizontalChartInstance = null;
 
 let currentSortMode = 'default'; // 'default' | 'progress_desc' | 'progress_asc'
+let nextDevoirSortMode = 'missing_asc'; // 'missing_asc' | 'missing_desc' | 'pct_desc' | 'default'
+let nextDevoirFilterMode = 'all'; // 'all' | 'in_progress' | 'ready' | 'completed'
+let nextDevoirViewMode = 'cards'; // 'cards' | 'chart'
 let lastKnownState = null;
 
 export function initChartsModule() {
@@ -24,12 +28,15 @@ export function initChartsModule() {
       }
     });
   }
+
+  initNextDevoirControls();
 }
 
 export function renderCharts(state) {
   if (!state || typeof window.Chart === 'undefined') return;
   lastKnownState = state;
 
+  renderNextDevoirSection(state);
   updateBarChart(state);
   updateRadarChart(state);
   updateDoughnutCharts(state);
@@ -433,4 +440,340 @@ function renderComparisonTable(state) {
 
 function escapeHtml(str) {
   return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+/* ============================================================
+   NOUVELLE SECTION : PROCHAINS DEVOIRS (RÉALISÉES & MANQUANTES)
+   ============================================================ */
+
+function initNextDevoirControls() {
+  const sortSelect = document.getElementById("nextDevoirSortSelect");
+  if (sortSelect) {
+    sortSelect.addEventListener("change", (e) => {
+      nextDevoirSortMode = e.target.value;
+      if (lastKnownState) {
+        renderNextDevoirSection(lastKnownState);
+      }
+    });
+  }
+
+  // Filtres boutons
+  const btnAll = document.getElementById("filterNextDevoirAll");
+  const btnInProgress = document.getElementById("filterNextDevoirInProgress");
+  const btnReady = document.getElementById("filterNextDevoirReady");
+  const btnDone = document.getElementById("filterNextDevoirDone");
+
+  const filterBtns = [
+    { btn: btnAll, mode: 'all' },
+    { btn: btnInProgress, mode: 'in_progress' },
+    { btn: btnReady, mode: 'ready' },
+    { btn: btnDone, mode: 'completed' }
+  ];
+
+  filterBtns.forEach(({ btn, mode }) => {
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      nextDevoirFilterMode = mode;
+      filterBtns.forEach(item => {
+        if (!item.btn) return;
+        if (item.mode === mode) {
+          item.btn.className = "px-2.5 py-1 rounded-lg bg-white shadow-2xs text-slate-900 font-bold transition";
+        } else {
+          item.btn.className = "px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 font-medium transition";
+        }
+      });
+      if (lastKnownState) {
+        renderNextDevoirSection(lastKnownState);
+      }
+    });
+  });
+
+  // Bascule Barres de progrès vs Graphique comparatif
+  const btnToggleCards = document.getElementById("btnToggleDevoirCards");
+  const btnToggleChart = document.getElementById("btnToggleDevoirChart");
+  const cardsContainer = document.getElementById("nextDevoirCardsContainer");
+  const chartWrapper = document.getElementById("nextDevoirChartWrapper");
+
+  btnToggleCards?.addEventListener("click", () => {
+    nextDevoirViewMode = 'cards';
+    if (btnToggleCards) btnToggleCards.className = "px-3 py-1 rounded-md bg-white shadow-2xs text-indigo-700 font-bold transition";
+    if (btnToggleChart) btnToggleChart.className = "px-3 py-1 rounded-md text-slate-600 hover:text-slate-900 font-medium transition";
+    cardsContainer?.classList.remove("hidden");
+    chartWrapper?.classList.add("hidden");
+  });
+
+  btnToggleChart?.addEventListener("click", () => {
+    nextDevoirViewMode = 'chart';
+    if (btnToggleChart) btnToggleChart.className = "px-3 py-1 rounded-md bg-white shadow-2xs text-indigo-700 font-bold transition";
+    if (btnToggleCards) btnToggleCards.className = "px-3 py-1 rounded-md text-slate-600 hover:text-slate-900 font-medium transition";
+    cardsContainer?.classList.add("hidden");
+    chartWrapper?.classList.remove("hidden");
+    if (lastKnownState) {
+      updateNextDevoirChart(lastKnownState);
+    }
+  });
+}
+
+function renderNextDevoirSection(state) {
+  if (!state) return;
+  const cardsContainer = document.getElementById("nextDevoirCardsContainer");
+  if (!cardsContainer) return;
+
+  // Calcul des données pour chaque matière
+  const allDevoirInfos = CNED_SUBJECTS.map(sub => getNextDevoirInfo(sub.id, state));
+
+  // Mise à jour des compteurs de filtres
+  let countInProgress = 0;
+  let countReady = 0;
+  let countDone = 0;
+
+  allDevoirInfos.forEach(info => {
+    if (info.isAllCompleted) countDone++;
+    else if (info.isReadyToSubmit) countReady++;
+    else countInProgress++;
+  });
+
+  const elAll = document.getElementById("countDevoirAll");
+  const elProg = document.getElementById("countDevoirInProgress");
+  const elReady = document.getElementById("countDevoirReady");
+  const elDone = document.getElementById("countDevoirDone");
+  if (elAll) elAll.textContent = allDevoirInfos.length;
+  if (elProg) elProg.textContent = countInProgress;
+  if (elReady) elReady.textContent = countReady;
+  if (elDone) elDone.textContent = countDone;
+
+  // Filtrage
+  let filtered = allDevoirInfos.filter(info => {
+    if (nextDevoirFilterMode === 'in_progress') return !info.isAllCompleted && !info.isReadyToSubmit;
+    if (nextDevoirFilterMode === 'ready') return info.isReadyToSubmit;
+    if (nextDevoirFilterMode === 'completed') return info.isAllCompleted;
+    return true;
+  });
+
+  // Tri
+  filtered.sort((a, b) => {
+    if (nextDevoirSortMode === 'missing_asc') {
+      // Les matières terminées à la fin
+      if (a.isAllCompleted && !b.isAllCompleted) return 1;
+      if (!a.isAllCompleted && b.isAllCompleted) return -1;
+      // Prêts à rendre en premier (0 séances manquantes)
+      if (a.cycleRemainingSessions !== b.cycleRemainingSessions) {
+        return a.cycleRemainingSessions - b.cycleRemainingSessions;
+      }
+      return b.cyclePercent - a.cyclePercent;
+    } else if (nextDevoirSortMode === 'missing_desc') {
+      if (a.isAllCompleted && !b.isAllCompleted) return 1;
+      if (!a.isAllCompleted && b.isAllCompleted) return -1;
+      return b.cycleRemainingSessions - a.cycleRemainingSessions;
+    } else if (nextDevoirSortMode === 'pct_desc') {
+      return b.cyclePercent - a.cyclePercent;
+    }
+    // Ordre CNED par défaut
+    return 0;
+  });
+
+  // Rendu des cartes de barres de progrès
+  if (filtered.length === 0) {
+    cardsContainer.innerHTML = `
+      <div class="col-span-full py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 text-xs">
+        <span class="text-base block mb-1">🔍</span>
+        <span>Aucune matière ne correspond à ce filtre pour le moment.</span>
+      </div>
+    `;
+  } else {
+    cardsContainer.innerHTML = filtered.map(renderNextDevoirCard).join('');
+  }
+
+  // Mise à jour du graphique horizontal
+  updateNextDevoirChart(state);
+}
+
+function renderNextDevoirCard(item) {
+  let barGradient = "bg-gradient-to-r from-indigo-500 to-blue-600";
+  let pulseClass = "";
+
+  if (item.isAllCompleted) {
+    barGradient = "bg-gradient-to-r from-purple-500 to-indigo-600";
+  } else if (item.isReadyToSubmit) {
+    barGradient = "bg-gradient-to-r from-emerald-500 to-teal-500";
+    pulseClass = "ring-2 ring-emerald-400 ring-offset-1 animate-pulse";
+  }
+
+  return `
+    <div class="bg-white rounded-2xl p-4 border ${item.isReadyToSubmit ? 'border-emerald-300 shadow-sm' : 'border-slate-200/90 shadow-2xs'} flex flex-col justify-between gap-3 hover:border-indigo-300 transition-all duration-200">
+      
+      <!-- En-tête de la carte matière -->
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="text-2xl p-1 bg-slate-100/80 rounded-xl shrink-0">${item.subjectIcon}</span>
+          <div class="min-w-0">
+            <h4 class="font-extrabold text-slate-900 text-sm truncate">${escapeHtml(item.subjectName)}</h4>
+            <span class="text-[11px] text-slate-500 font-medium block truncate">
+              ${escapeHtml(item.unitsCoveredText)}
+            </span>
+          </div>
+        </div>
+
+        <!-- Badge Devoir ou Terminé -->
+        <span class="text-xs px-2.5 py-1 rounded-xl border ${item.statusBadgeClass} font-bold shrink-0 flex items-center gap-1">
+          <span>${item.isAllCompleted ? '🏆' : (item.isReadyToSubmit ? '🎯' : '📝')}</span>
+          <span>${item.isAllCompleted ? 'Terminé' : `Devoir ${item.nextDevoirNum} / ${item.totalDevoirs}`}</span>
+        </span>
+      </div>
+
+      <!-- Barre de progression visuelle du cycle -->
+      <div class="space-y-1.5 pt-1">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-bold ${item.isReadyToSubmit ? 'text-emerald-700' : 'text-slate-700'}">
+            ${item.isAllCompleted 
+              ? 'Toutes les séances de l\'année faites !' 
+              : `${item.cycleDoneSessions} sur ${item.cycleTotalSessions} séances faites`}
+          </span>
+          <span class="font-black text-xs px-2 py-0.5 rounded-md ${item.isReadyToSubmit ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}">
+            ${item.cyclePercent}%
+          </span>
+        </div>
+
+        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200/60">
+          <div class="h-full rounded-full transition-all duration-500 ${barGradient} ${pulseClass}" style="width: ${item.cyclePercent}%"></div>
+        </div>
+      </div>
+
+      <!-- Détail chiffré : séances faites & manquantes -->
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-semibold">
+        <div class="flex items-center gap-1.5 text-slate-600">
+          <span class="text-emerald-600 font-bold">✓</span>
+          <span><b>${item.isAllCompleted ? 'Cycle complet' : `${item.cycleDoneSessions} faites`}</b></span>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          ${item.isAllCompleted ? `
+            <span class="text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200">
+              ${item.totalDevoirs}/${item.totalDevoirs} devoirs rendus 🎉
+            </span>
+          ` : item.isReadyToSubmit ? `
+            <span class="text-emerald-700 font-black bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300">
+              🎯 Prêt à rendre !
+            </span>
+          ` : `
+            <span class="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+              ⏳ ${item.cycleRemainingSessions} manquante${item.cycleRemainingSessions > 1 ? 's' : ''}
+            </span>
+          `}
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+function updateNextDevoirChart(state) {
+  const canvas = document.getElementById("chartNextDevoirHorizontal");
+  if (!canvas || typeof window.Chart === 'undefined') return;
+
+  const infoList = CNED_SUBJECTS.map(sub => getNextDevoirInfo(sub.id, state));
+  const labels = infoList.map(s => `${s.subjectIcon} ${s.subjectName} (${s.isAllCompleted ? 'Fini' : 'D' + s.nextDevoirNum})`);
+  const doneData = infoList.map(s => s.isAllCompleted ? s.cycleTotalSessions : s.cycleDoneSessions);
+  const remainingData = infoList.map(s => s.isAllCompleted ? 0 : s.cycleRemainingSessions);
+
+  const doneColors = infoList.map(s => {
+    if (s.isAllCompleted) return '#8b5cf6'; // violet
+    if (s.isReadyToSubmit) return '#10b981'; // émeraude
+    return '#4f46e5'; // indigo
+  });
+
+  const remainingColors = infoList.map(s => s.cycleRemainingSessions > 0 ? '#f59e0b' : '#e2e8f0');
+
+  if (nextDevoirHorizontalChartInstance) {
+    nextDevoirHorizontalChartInstance.data.labels = labels;
+    nextDevoirHorizontalChartInstance.data.datasets[0].data = doneData;
+    nextDevoirHorizontalChartInstance.data.datasets[0].backgroundColor = doneColors;
+    nextDevoirHorizontalChartInstance.data.datasets[1].data = remainingData;
+    nextDevoirHorizontalChartInstance.data.datasets[1].backgroundColor = remainingColors;
+    nextDevoirHorizontalChartInstance.data.metaInfoList = infoList;
+    nextDevoirHorizontalChartInstance.update();
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  nextDevoirHorizontalChartInstance = new window.Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      metaInfoList: infoList,
+      datasets: [
+        {
+          label: 'Séances faites pour le devoir',
+          data: doneData,
+          backgroundColor: doneColors,
+          borderRadius: 4,
+          stack: 'devoirStack'
+        },
+        {
+          label: 'Séances manquantes',
+          data: remainingData,
+          backgroundColor: remainingColors,
+          borderRadius: 4,
+          stack: 'devoirStack'
+        }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { boxWidth: 12, font: { size: 11, weight: 'bold' } }
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const idx = items[0].dataIndex;
+              const item = infoList[idx];
+              return `${item.subjectIcon} ${item.subjectName} : ${item.isAllCompleted ? 'Tous devoirs terminés' : 'Devoir ' + item.nextDevoirNum}`;
+            },
+            afterTitle: (items) => {
+              const idx = items[0].dataIndex;
+              const item = infoList[idx];
+              return item.unitsCoveredText;
+            },
+            label: (context) => {
+              const idx = context.dataIndex;
+              const item = infoList[idx];
+              if (context.datasetIndex === 0) {
+                return `✓ Réalisées : ${item.cycleDoneSessions} / ${item.cycleTotalSessions} séances (${item.cyclePercent}%)`;
+              } else {
+                return item.isAllCompleted
+                  ? `🏆 Matière 100% terminée (${item.totalDevoirs}/${item.totalDevoirs} devoirs)`
+                  : (item.cycleRemainingSessions === 0 
+                      ? `🎯 Prêt à déposer au CNED !` 
+                      : `⏳ Manquantes : ${item.cycleRemainingSessions} séance(s)`);
+              }
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Séances du cycle vers le devoir (Faites + Manquantes)',
+            font: { size: 10, weight: 'bold' },
+            color: '#64748b'
+          },
+          grid: { color: '#f1f5f9' },
+          ticks: { stepSize: 1, font: { size: 10 } }
+        },
+        y: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { font: { size: 11, weight: '600' }, color: '#334155' }
+        }
+      }
+    }
+  });
 }
